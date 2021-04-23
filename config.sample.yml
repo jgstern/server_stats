@@ -1,0 +1,9 @@
+postgres:
+  url: "postgres://synapse:password@localhost/synapse"
+  query: "SELECT destination FROM destinations WHERE retry_interval = 0;"
+
+influxdb:
+  host: "http://localhost:8086"
+  token: ""
+  bucket: "serverstats"
+  org: ""

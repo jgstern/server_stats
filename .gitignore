@@ -1,0 +1,6 @@
+/target
+*.svg
+perf.data*
+/.vscode    
+config.yml
+config.yaml
