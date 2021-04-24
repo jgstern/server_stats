@@ -13,24 +13,37 @@ impl InfluxDb {
     }
 
     pub async fn push_versions(&self) -> color_eyre::Result<()> {
-        let servers_map = crate::SERVERS_CACHE.read().await.clone();
-        let versions_map = crate::VERSIONS_CACHE.read().await.clone();
-        let servers = servers_map.keys();
+        let servers_map = crate::CACHE_DB.get_all_servers();
+        let servers: Vec<String> = servers_map
+            .map(|x| {
+                let server_name_bytes = x.expect("unable to get bytes from server_keys");
+                let server_name_untrimmed = String::from_utf8_lossy(server_name_bytes.as_ref());
+                server_name_untrimmed.replace("address/", "")
+            })
+            .collect();
         let mut points: Vec<ServerVersion> = Vec::new();
         info!("Server amount: {}", servers.len());
         for server_name in servers {
-            if let Some(version) = versions_map.get(server_name) {
-                let now = SystemTime::now();
-                let since_the_epoch = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
+            match crate::CACHE_DB.get_server_version(server_name.clone()) {
+                Ok(version) => {
+                    if let Some(version) = version {
+                        let now = SystemTime::now();
+                        let since_the_epoch =
+                            now.duration_since(UNIX_EPOCH).expect("Time went backwards");
 
-                let point = ServerVersion {
-                    server_name: server_name.clone(),
-                    version: version.clone(),
-                    timestamp: Timestamp::from(since_the_epoch.as_millis() as i64),
-                };
-                points.push(point);
-            } else {
-                //println!("Server ({}) has no version yet", server_name);
+                        let point = ServerVersion {
+                            server_name: server_name.clone(),
+                            version: format!("{} {}", version.name, version.version),
+                            timestamp: Timestamp::from(since_the_epoch.as_millis() as i64),
+                        };
+                        points.push(point);
+                    } else {
+                        //println!("Server ({}) has no version yet", server_name);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to find server_version: {}", e);
+                }
             }
         }
         if points.is_empty() {

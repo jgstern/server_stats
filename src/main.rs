@@ -1,14 +1,13 @@
-use crate::{config::Config, scraping::InfluxDb};
+use crate::{config::Config, database::cache::CacheDb, scraping::InfluxDb};
 use clap::Clap;
 use color_eyre::eyre::Result;
 use once_cell::sync::{Lazy, OnceCell};
-use std::collections::HashMap;
-use tokio::sync::RwLock;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing::{error, info};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 
 mod config;
+mod database;
 mod errors;
 mod jobs;
 mod matrix;
@@ -21,14 +20,9 @@ struct Opts {
 }
 
 pub static CONFIG: OnceCell<Config> = OnceCell::new();
+pub static CACHE_DB: Lazy<CacheDb> = Lazy::new(CacheDb::new);
 
 pub static APP_USER_AGENT: &str = concat!("MTRNord/", env!("CARGO_PKG_NAME"),);
-
-pub static SERVERS_CACHE: Lazy<RwLock<HashMap<String, String>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
-
-pub static VERSIONS_CACHE: Lazy<RwLock<HashMap<String, String>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
 
 pub static INFLUX_CLIENT: Lazy<InfluxDb> = Lazy::new(InfluxDb::new);
 #[tokio::main]
@@ -41,6 +35,7 @@ async fn main() -> Result<()> {
         // Set the max level for `my_crate::my_mod` to DEBUG, overriding
         // any directives parsed from the env variable.
         .add_directive("server_stats=info".parse()?)
+        .add_directive("sled=info".parse()?)
         .add_directive("rustls::session=off".parse()?);
 
     tracing_subscriber::fmt()
@@ -48,6 +43,7 @@ async fn main() -> Result<()> {
         .with_thread_names(true)
         .with_env_filter(filter)
         .init();
+
     info!("Starting...");
     let opts: Opts = Opts::parse();
 

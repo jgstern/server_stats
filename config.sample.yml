@@ -7,3 +7,8 @@ influxdb:
   token: ""
   bucket: "serverstats"
   org: ""
+
+bot:
+  mxid: ""
+  device_id: ""
+  access_token: ""

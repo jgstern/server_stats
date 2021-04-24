@@ -2,10 +2,10 @@ use crate::errors::Errors;
 use color_eyre::eyre::Result;
 use futures::TryStreamExt;
 use reqwest::StatusCode;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPoolOptions;
 use std::time::Duration;
-use tracing::{debug, error};
+use tracing::{debug, info};
 
 mod discover;
 
@@ -30,11 +30,7 @@ pub async fn fetch_servers_from_db() -> Result<()> {
     if let Err(e) = rows
         .try_for_each_concurrent(None, |row| async move {
             {
-                if crate::SERVERS_CACHE
-                    .read()
-                    .await
-                    .contains_key(&row.destination)
-                {
+                if crate::CACHE_DB.contains_server(row.destination.clone()) {
                     return Ok(());
                 }
             }
@@ -42,16 +38,15 @@ pub async fn fetch_servers_from_db() -> Result<()> {
                 crate::matrix::discover::resolve_server_name(row.destination.clone()).await;
 
             if let Ok(ref server_url) = server_url {
-                crate::SERVERS_CACHE
-                    .write()
-                    .await
-                    .insert(row.destination.clone(), server_url.to_string());
+                crate::CACHE_DB
+                    .set_server_address(row.destination.clone(), server_url.to_string())
+                    .expect("Unable to write to sled");
             }
             Ok(())
         })
         .await
     {
-        error!("{:?}", e)
+        info!("Error 1: {:?}", e)
     };
     pool.close().await;
     Ok(())
@@ -63,29 +58,28 @@ pub async fn get_server_version(server_name: String) -> Result<()> {
         .user_agent(crate::APP_USER_AGENT)
         .build()?;
 
-    let read_lock = crate::SERVERS_CACHE.read().await;
-    let address = read_lock.get(&server_name).unwrap();
+    let address = crate::CACHE_DB.get_server_address(server_name.clone());
+    if let Some(address) = address {
+        let address = String::from_utf8_lossy(address.as_ref());
 
-    let resp = client
-        .get(format!("https://{}/_matrix/federation/v1/version", address))
-        .send()
-        .await;
-    if let Ok(resp) = resp {
-        if resp.status() == StatusCode::OK {
-            let body = resp
-                .json::<MatrixVersion>()
-                .await
-                .map_err(|_| Errors::MatrixFederationVersionWronglyConfigured);
-            if let Ok(body) = body {
-                debug!(
-                    "{}: {} {}",
-                    server_name, body.server.name, body.server.version
-                );
-                {
-                    crate::VERSIONS_CACHE.write().await.insert(
-                        server_name,
-                        format!("{} {}", body.server.name, body.server.version),
+        let resp = client
+            .get(format!("https://{}/_matrix/federation/v1/version", address))
+            .send()
+            .await;
+        if let Ok(resp) = resp {
+            if resp.status() == StatusCode::OK {
+                let body = resp
+                    .json::<MatrixVersion>()
+                    .await
+                    .map_err(|_| Errors::MatrixFederationVersionWronglyConfigured);
+                if let Ok(body) = body {
+                    debug!(
+                        "{}: {} {}",
+                        server_name, body.server.name, body.server.version
                     );
+                    {
+                        crate::CACHE_DB.set_server_version(server_name, body.server)?;
+                    }
                 }
             }
         }
@@ -99,7 +93,7 @@ pub struct MatrixVersion {
     pub(crate) server: MatrixVersionServer,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MatrixVersionServer {
     pub(crate) name: String,
     pub(crate) version: String,
