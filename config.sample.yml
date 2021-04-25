@@ -9,6 +9,6 @@ influxdb:
   org: ""
 
 bot:
+  homeserver_url: ""
   mxid: ""
-  device_id: ""
-  access_token: ""
+  password: ""

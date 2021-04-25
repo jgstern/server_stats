@@ -1,4 +1,4 @@
-use crate::{config::Config, database::cache::CacheDb, scraping::InfluxDb};
+use crate::{bot::login_and_sync, config::Config, database::cache::CacheDb, scraping::InfluxDb};
 use clap::Clap;
 use color_eyre::eyre::Result;
 use once_cell::sync::{Lazy, OnceCell};
@@ -6,6 +6,7 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing::{error, info};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 
+mod bot;
 mod config;
 mod database;
 mod errors;
@@ -36,6 +37,7 @@ async fn main() -> Result<()> {
         // any directives parsed from the env variable.
         .add_directive("server_stats=info".parse()?)
         .add_directive("sled=info".parse()?)
+        //.add_directive("matrix_sdk=debug".parse()?)
         .add_directive("rustls::session=off".parse()?);
 
     tracing_subscriber::fmt()
@@ -50,19 +52,37 @@ async fn main() -> Result<()> {
     info!("Loading Configs...");
     let config = Config::load(opts.config)?;
     CONFIG.set(config);
+    let handle = tokio::runtime::Handle::current();
+    std::thread::spawn(move || {
+        handle.spawn(async move {
+            // Get servers once
+            if let Err(e) = crate::jobs::find_servers().await {
+                error!("Error servers: {}", e);
+            }
 
-    // Get servers once
-    if let Err(e) = crate::jobs::find_servers().await {
-        error!("Error: {}", e);
+            if let Err(e) = crate::jobs::update_versions().await {
+                error!("Error versions: {}", e);
+            }
+
+            // Starting sheduler
+            info!("Starting sheduler");
+            start_queue().await.unwrap();
+        });
+    });
+
+    info!("Starting Bot...");
+    if let Some(ref bot_config) = crate::CONFIG.get().unwrap().bot {
+        if let Err(e) = login_and_sync(
+            bot_config.homeserver_url.to_string(),
+            bot_config.mxid.to_string(),
+            bot_config.password.to_string(),
+        )
+        .await
+        {
+            error!("Failed to login or start sync: {}", e);
+        };
     }
 
-    if let Err(e) = crate::jobs::update_versions().await {
-        error!("Error: {}", e);
-    }
-
-    // Starting sheduler
-    info!("Starting sheduler");
-    start_queue().await?;
     Ok(())
 }
 
