@@ -41,5 +41,6 @@ rev = "ab180362c931606385dd53b73620d82ef2c3166d"
 [profile.release]
 opt-level = 3
 lto = true
+codegen-units = 1
 # Use for cargo flamegraph
 #debug = true
