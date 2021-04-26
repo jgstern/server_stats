@@ -17,9 +17,10 @@ pub async fn update_versions() -> color_eyre::Result<()> {
     stream
         .for_each_concurrent(None, |val| async move {
             let server_address_bytes = val.expect("unable to get server_address from sled");
-            let server_address =
-                String::from_utf8_lossy(server_address_bytes.as_ref()).replace("address/", "");
-            if let Err(e) = crate::matrix::get_server_version(server_address.to_string()).await {
+            let server_address = std::str::from_utf8(server_address_bytes.as_ref())
+                .unwrap()
+                .replace("address/", "");
+            if let Err(e) = crate::matrix::get_server_version(&server_address).await {
                 error!("Failed to get version: {}", e);
             };
         })

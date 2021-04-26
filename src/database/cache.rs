@@ -3,7 +3,7 @@ use sled::IVec;
 
 use crate::database::graph::GraphDb;
 use crate::matrix::MatrixVersionServer;
-use tracing::error;
+use tracing::{error, info};
 
 #[derive(Debug)]
 pub struct CacheDb {
@@ -16,7 +16,7 @@ impl CacheDb {
         CacheDb::default()
     }
 
-    pub fn set_server_address(&self, server_name: String, server_address: String) -> Result<()> {
+    pub fn set_server_address(&self, server_name: &str, server_address: String) -> Result<()> {
         self.db.insert(
             format!("address/{}", server_name).as_bytes(),
             server_address.as_bytes(),
@@ -27,7 +27,7 @@ impl CacheDb {
 
     pub fn set_server_version(
         &self,
-        server_name: String,
+        server_name: &str,
         server_version: MatrixVersionServer,
     ) -> Result<()> {
         let server_version_bytes = bincode::serialize(&server_version)?;
@@ -39,7 +39,7 @@ impl CacheDb {
         Ok(())
     }
 
-    pub fn contains_server(&self, server_name: String) -> bool {
+    pub fn contains_server(&self, server_name: &str) -> bool {
         if let Ok(res) = self
             .db
             .contains_key(format!("address/{}", server_name).as_bytes())
@@ -49,7 +49,7 @@ impl CacheDb {
         false
     }
 
-    pub fn get_server_address(&self, server_name: String) -> Option<IVec> {
+    pub fn get_server_address(&self, server_name: &str) -> Option<IVec> {
         if let Ok(res) = self.db.get(format!("address/{}", server_name).as_bytes()) {
             return res;
         } else {
@@ -58,7 +58,7 @@ impl CacheDb {
         None
     }
 
-    pub fn get_server_version(&self, server_name: String) -> Result<Option<MatrixVersionServer>> {
+    pub fn get_server_version(&self, server_name: &str) -> Result<Option<MatrixVersionServer>> {
         match self.db.get(format!("version/{}", server_name).as_bytes()) {
             Ok(res) => {
                 if let Some(bytes) = res {
@@ -91,6 +91,7 @@ impl CacheDb {
 
 impl Default for CacheDb {
     fn default() -> Self {
+        info!("Created new db");
         let db = sled::Config::default()
             .path("./storage/cache".to_owned())
             .use_compression(true)

@@ -16,30 +16,29 @@ struct DestinationKey {
 
 pub async fn fetch_servers_from_db() -> Result<()> {
     let config = crate::CONFIG.get().expect("unable to get config");
-    let postgres_url = config.postgres.url.clone();
-    let postgres_query = config.postgres.query.clone();
+    let postgres_url = config.postgres.url.as_ref();
+    let postgres_query = config.postgres.query.as_ref();
     let pool = PgPoolOptions::new()
         .max_connections(100)
-        .connect(&postgres_url)
+        .connect(postgres_url)
         .await?;
 
-    let rows = sqlx::query_as::<_, DestinationKey>(&postgres_query)
+    let rows = sqlx::query_as::<_, DestinationKey>(postgres_query)
         .fetch(&pool)
         .map_err(|e| Errors::DatabaseError(e.to_string()));
 
     if let Err(e) = rows
         .try_for_each_concurrent(None, |row| async move {
             {
-                if crate::CACHE_DB.contains_server(row.destination.clone()) {
+                if crate::CACHE_DB.contains_server(&row.destination) {
                     return Ok(());
                 }
             }
-            let server_url =
-                crate::matrix::discover::resolve_server_name(row.destination.clone()).await;
+            let server_url = crate::matrix::discover::resolve_server_name(&row.destination).await;
 
             if let Ok(ref server_url) = server_url {
                 crate::CACHE_DB
-                    .set_server_address(row.destination.clone(), server_url.to_string())
+                    .set_server_address(&row.destination, server_url.to_string())
                     .expect("Unable to write to sled");
             }
             Ok(())
@@ -52,13 +51,13 @@ pub async fn fetch_servers_from_db() -> Result<()> {
     Ok(())
 }
 
-pub async fn get_server_version(server_name: String) -> Result<()> {
+pub async fn get_server_version(server_name: &str) -> Result<()> {
     let client = reqwest::ClientBuilder::new()
         .timeout(Duration::from_secs(30))
         .user_agent(crate::APP_USER_AGENT)
         .build()?;
 
-    let address = crate::CACHE_DB.get_server_address(server_name.clone());
+    let address = crate::CACHE_DB.get_server_address(server_name);
     if let Some(address) = address {
         let address = String::from_utf8_lossy(address.as_ref());
 
@@ -88,12 +87,12 @@ pub async fn get_server_version(server_name: String) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct MatrixVersion {
     pub(crate) server: MatrixVersionServer,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct MatrixVersionServer {
     pub(crate) name: String,
     pub(crate) version: String,

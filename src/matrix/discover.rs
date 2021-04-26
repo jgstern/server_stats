@@ -28,7 +28,7 @@ impl fmt::Display for MatrixSsServername {
 
 /// Resolves the server_name for usage with matrix S-S-Api according too https://matrix.org/docs/spec/server_server/latest#server-discovery
 /// It is required that the HOST header always gets set to the server_name when it is returning a IP.
-pub async fn resolve_server_name(server_name: String) -> Result<MatrixSsServername, Errors> {
+pub async fn resolve_server_name(server_name: &str) -> Result<MatrixSsServername, Errors> {
     // If ip literal with port
     if let Ok(addr) = SocketAddr::from_str(&server_name) {
         return Ok(MatrixSsServername::Ip(addr));
@@ -116,7 +116,7 @@ pub async fn resolve_server_name(server_name: String) -> Result<MatrixSsServerna
     Ok(MatrixSsServername::Host(format!("{}:8448", server_name)))
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct MatrixSsWellKnown {
     #[serde(rename = "m.server")]
     pub(crate) server: String,

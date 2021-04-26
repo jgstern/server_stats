@@ -55,34 +55,33 @@ async fn main() -> Result<()> {
     let handle = tokio::runtime::Handle::current();
     std::thread::spawn(move || {
         handle.spawn(async move {
-            // Get servers once
-            if let Err(e) = crate::jobs::find_servers().await {
-                error!("Error servers: {}", e);
+            if let Some(ref bot_config) = crate::CONFIG.get().unwrap().bot {
+                info!("Starting Bot...");
+                if let Err(e) = login_and_sync(
+                    bot_config.homeserver_url.to_string(),
+                    bot_config.mxid.to_string(),
+                    bot_config.password.to_string(),
+                )
+                .await
+                {
+                    error!("Failed to login or start sync: {}", e);
+                };
             }
-
-            if let Err(e) = crate::jobs::update_versions().await {
-                error!("Error versions: {}", e);
-            }
-
-            // Starting sheduler
-            info!("Starting sheduler");
-            start_queue().await.unwrap();
         });
     });
 
-    info!("Starting Bot...");
-    if let Some(ref bot_config) = crate::CONFIG.get().unwrap().bot {
-        if let Err(e) = login_and_sync(
-            bot_config.homeserver_url.to_string(),
-            bot_config.mxid.to_string(),
-            bot_config.password.to_string(),
-        )
-        .await
-        {
-            error!("Failed to login or start sync: {}", e);
-        };
+    // Get servers once
+    if let Err(e) = crate::jobs::find_servers().await {
+        error!("Error servers: {}", e);
     }
 
+    if let Err(e) = crate::jobs::update_versions().await {
+        error!("Error versions: {}", e);
+    }
+
+    // Starting sheduler
+    info!("Starting sheduler");
+    start_queue().await.unwrap();
     Ok(())
 }
 

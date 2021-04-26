@@ -17,14 +17,15 @@ impl InfluxDb {
         let servers: Vec<String> = servers_map
             .map(|x| {
                 let server_name_bytes = x.expect("unable to get bytes from server_keys");
-                let server_name_untrimmed = String::from_utf8_lossy(server_name_bytes.as_ref());
+                let server_name_untrimmed =
+                    std::str::from_utf8(server_name_bytes.as_ref()).unwrap();
                 server_name_untrimmed.replace("address/", "")
             })
             .collect();
         let mut points: Vec<ServerVersion> = Vec::new();
         info!("Server amount: {}", servers.len());
         for server_name in servers {
-            match crate::CACHE_DB.get_server_version(server_name.clone()) {
+            match crate::CACHE_DB.get_server_version(&server_name) {
                 Ok(version) => {
                     if let Some(version) = version {
                         let now = SystemTime::now();
@@ -32,7 +33,7 @@ impl InfluxDb {
                             now.duration_since(UNIX_EPOCH).expect("Time went backwards");
 
                         let point = ServerVersion {
-                            server_name: server_name.clone(),
+                            server_name: server_name.to_string(),
                             version: format!("{} {}", version.name, version.version),
                             timestamp: Timestamp::from(since_the_epoch.as_millis() as i64),
                         };
@@ -68,10 +69,10 @@ impl InfluxDb {
 impl Default for InfluxDb {
     fn default() -> Self {
         let config = crate::CONFIG.get().expect("unable to get config");
-        let host = config.influxdb.host.clone();
-        let token = config.influxdb.token.clone();
-        let bucket = config.influxdb.bucket.clone();
-        let org = config.influxdb.org.clone();
+        let host = config.influxdb.host.as_ref();
+        let token = config.influxdb.token.as_ref();
+        let bucket = config.influxdb.bucket.as_ref();
+        let org = config.influxdb.org.as_ref();
         let client = Client::new(host, token)
             .with_bucket(bucket)
             .with_org(org)

@@ -1,17 +1,17 @@
 use futures::future::{BoxFuture, FutureExt};
 use matrix_sdk::{
-    self, async_trait,
+    self,
+    api::r0::filter::RoomEventFilter,
+    api::r0::message::get_message_events::{Direction, Request as MessagesRequest},
+    async_trait,
     events::{
+        room::member::MemberEventContent,
         room::message::{MessageEventContent, MessageType, TextMessageEventContent},
-        AnyMessageEvent, AnyRoomEvent, SyncMessageEvent,
+        AnyMessageEvent, AnyRoomEvent, StrippedStateEvent, SyncMessageEvent,
     },
     identifiers::RoomIdOrAliasId,
     room::Room,
-    Client, ClientConfig, EventHandler, Session as SdkSession, SyncSettings,
-};
-use matrix_sdk::{
-    api::r0::message::get_message_events::Request as MessagesRequest,
-    events::{room::member::MemberEventContent, StrippedStateEvent},
+    uint, Client, ClientConfig, EventHandler, Session as SdkSession, SyncSettings,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -104,63 +104,83 @@ impl VoyagerBot {
                 return;
             }
             for cap in re.captures_iter(&msg_body) {
-                // Got link
-                info!("New room: {}", &cap[0]);
-                let room_id_or_alias = RoomIdOrAliasId::try_from(&cap[0]).unwrap();
-                let room_id = match self
-                    .client
-                    .join_room_by_id_or_alias(&room_id_or_alias, &[])
-                    .await
-                {
-                    Ok(resp) => Some(resp.room_id),
-                    Err(e) => {
-                        error!("Failed to join room: {}", e);
-                        None
-                    }
-                };
+                let cloned_self = self.clone();
+                let server = cap[0].to_string();
+                //TODO only continue when we do not already scan that room or have scanned it
+                tokio::spawn(async move {
+                    // Got link
+                    info!("New room: {}", server);
+                    let room_id_or_alias = RoomIdOrAliasId::try_from(server).unwrap();
+                    let room_id = match cloned_self
+                        .client
+                        .join_room_by_id_or_alias(&room_id_or_alias, &[])
+                        .await
+                    {
+                        Ok(resp) => Some(resp.room_id),
+                        Err(e) => {
+                            error!("Failed to join room: {}", e);
+                            None
+                        }
+                    };
 
-                if let Some(room_id) = room_id {
-                    sleep(Duration::from_secs(5)).await;
-                    if let Some(Room::Joined(room)) = self.client.get_room(&room_id) {
-                        let prev_batch = room.last_prev_batch().unwrap();
-                        let request = MessagesRequest::backward(&room_id, &prev_batch);
-                        let resp = room
-                            .messages(request)
-                            .await
-                            .expect("failed to get older events");
-                        let mut chunk = resp.chunk;
-                        while !chunk.is_empty() {
-                            for message in chunk {
-                                let deserialized_message = message.deserialize();
-                                if let Ok(AnyRoomEvent::Message(AnyMessageEvent::RoomMessage(
-                                    message,
-                                ))) = deserialized_message
-                                {
-                                    let sender = message.sender;
-                                    if self.client.user_id().await.unwrap() == sender {
-                                        continue;
-                                    }
-
-                                    let content = message.content.msgtype;
-                                    if let MessageType::Text(text_content) = content {
-                                        let cloned_self = self.clone();
-                                        tokio::spawn(async move {
-                                            cloned_self.process_message(text_content.body).await;
-                                        });
-                                    }
-                                }
-                            }
-                            // Try further
-                            let prev_batch = resp.end.clone().unwrap();
-                            let request = MessagesRequest::backward(&room_id, &prev_batch);
-                            let previous = room
+                    if let Some(room_id) = room_id {
+                        sleep(Duration::from_secs(5)).await;
+                        if let Some(Room::Joined(room)) = cloned_self.client.get_room(&room_id) {
+                            let prev_batch = room.last_prev_batch().unwrap();
+                            let mut filter = RoomEventFilter::empty();
+                            let types = vec!["m.room.message".to_string()];
+                            filter.types = Some(&types);
+                            let mut request =
+                                MessagesRequest::new(&room_id, &prev_batch, Direction::Backward);
+                            request.limit = uint!(30);
+                            request.filter = Some(filter.clone());
+                            let resp = room
                                 .messages(request)
                                 .await
                                 .expect("failed to get older events");
-                            chunk = previous.chunk;
+                            let mut chunk = resp.chunk;
+                            while !chunk.is_empty() {
+                                for message in chunk {
+                                    let deserialized_message = message.deserialize();
+                                    if let Ok(AnyRoomEvent::Message(
+                                        AnyMessageEvent::RoomMessage(message),
+                                    )) = deserialized_message
+                                    {
+                                        let sender = message.sender;
+                                        if cloned_self.client.user_id().await.unwrap() == sender {
+                                            continue;
+                                        }
+
+                                        let content = message.content.msgtype;
+                                        if let MessageType::Text(text_content) = content {
+                                            let cloned_self = cloned_self.clone();
+
+                                            tokio::spawn(async move {
+                                                cloned_self
+                                                    .process_message(text_content.body)
+                                                    .await;
+                                            });
+                                        }
+                                    }
+                                }
+                                // Try further
+                                let prev_batch = resp.end.clone().unwrap();
+                                let mut request = MessagesRequest::new(
+                                    &room_id,
+                                    &prev_batch,
+                                    Direction::Backward,
+                                );
+                                request.limit = uint!(30);
+                                request.filter = Some(filter.clone());
+                                let previous = room
+                                    .messages(request)
+                                    .await
+                                    .expect("failed to get older events");
+                                chunk = previous.chunk;
+                            }
                         }
                     }
-                }
+                });
             }
         }
         .boxed()

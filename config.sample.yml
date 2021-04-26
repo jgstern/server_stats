@@ -8,7 +8,7 @@ influxdb:
   bucket: "serverstats"
   org: ""
 
-bot:
-  homeserver_url: ""
-  mxid: ""
-  password: ""
+#bot:
+#  homeserver_url: ""
+#  mxid: ""
+#  password: ""
