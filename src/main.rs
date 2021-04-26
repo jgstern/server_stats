@@ -1,7 +1,9 @@
+#![deny(unsafe_code)]
 use crate::{bot::login_and_sync, config::Config, database::cache::CacheDb, scraping::InfluxDb};
 use clap::Clap;
 use color_eyre::eyre::Result;
 use once_cell::sync::{Lazy, OnceCell};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing::{error, info};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
@@ -21,6 +23,7 @@ struct Opts {
 }
 
 pub static CONFIG: OnceCell<Config> = OnceCell::new();
+pub static PG_POOL: OnceCell<PgPool> = OnceCell::new();
 pub static CACHE_DB: Lazy<CacheDb> = Lazy::new(CacheDb::new);
 
 pub static APP_USER_AGENT: &str = concat!("MTRNord/", env!("CARGO_PKG_NAME"),);
@@ -70,8 +73,15 @@ async fn main() -> Result<()> {
         });
     });
 
+    let config = crate::CONFIG.get().expect("unable to get config");
+    let postgres_url = config.postgres.url.as_ref();
+    let pool = PgPoolOptions::new()
+        .max_connections(100)
+        .connect(postgres_url)
+        .await?;
+
     // Get servers once
-    if let Err(e) = crate::jobs::find_servers().await {
+    if let Err(e) = crate::jobs::find_servers(&pool).await {
         error!("Error servers: {}", e);
     }
 
@@ -81,7 +91,19 @@ async fn main() -> Result<()> {
 
     // Starting sheduler
     info!("Starting sheduler");
+    PG_POOL.set(pool);
+
+    let handle = tokio::runtime::Handle::current();
+    ctrlc::set_handler(move || {
+        handle.spawn(async {
+            PG_POOL.get().unwrap().close().await;
+            std::process::exit(0);
+        });
+    })
+    .expect("Error setting Ctrl-C handler");
+
     start_queue().await.unwrap();
+
     Ok(())
 }
 
@@ -92,8 +114,8 @@ async fn start_queue() -> Result<()> {
         .add(
             //Should be */30
             Job::new("0 */30 * * * *", |_, _| {
-                tokio::spawn(async move {
-                    if let Err(e) = crate::jobs::find_servers().await {
+                tokio::spawn(async {
+                    if let Err(e) = crate::jobs::find_servers(&PG_POOL.get().unwrap()).await {
                         error!("Error: {}", e);
                     }
                 });

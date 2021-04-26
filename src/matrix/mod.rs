@@ -3,8 +3,7 @@ use color_eyre::eyre::Result;
 use futures::TryStreamExt;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::PgPoolOptions;
-use std::time::Duration;
+use sqlx::PgPool;
 use tracing::{debug, info};
 
 mod discover;
@@ -14,17 +13,11 @@ struct DestinationKey {
     destination: String,
 }
 
-pub async fn fetch_servers_from_db() -> Result<()> {
+pub async fn fetch_servers_from_db(pool: &PgPool) -> Result<()> {
     let config = crate::CONFIG.get().expect("unable to get config");
-    let postgres_url = config.postgres.url.as_ref();
     let postgres_query = config.postgres.query.as_ref();
-    let pool = PgPoolOptions::new()
-        .max_connections(100)
-        .connect(postgres_url)
-        .await?;
-
     let rows = sqlx::query_as::<_, DestinationKey>(postgres_query)
-        .fetch(&pool)
+        .fetch(pool)
         .map_err(|e| Errors::DatabaseError(e.to_string()));
 
     if let Err(e) = rows
@@ -47,16 +40,10 @@ pub async fn fetch_servers_from_db() -> Result<()> {
     {
         info!("Error 1: {:?}", e)
     };
-    pool.close().await;
     Ok(())
 }
 
-pub async fn get_server_version(server_name: &str) -> Result<()> {
-    let client = reqwest::ClientBuilder::new()
-        .timeout(Duration::from_secs(30))
-        .user_agent(crate::APP_USER_AGENT)
-        .build()?;
-
+pub async fn get_server_version(server_name: &str, client: &reqwest::Client) -> Result<()> {
     let address = crate::CACHE_DB.get_server_address(server_name);
     if let Some(address) = address {
         let address = String::from_utf8_lossy(address.as_ref());
