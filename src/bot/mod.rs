@@ -6,9 +6,10 @@ use matrix_sdk::{
     events::{
         room::member::MemberEventContent,
         room::message::{MessageEventContent, MessageType, TextMessageEventContent},
-        AnyMessageEvent, AnyRoomEvent, StrippedStateEvent, SyncMessageEvent,
+        AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, StrippedStateEvent,
+        SyncMessageEvent,
     },
-    identifiers::{RoomId, RoomIdOrAliasId},
+    identifiers::{EventId, RoomId, RoomIdOrAliasId},
     room::{Joined, Room},
     uint, Client, ClientConfig, EventHandler, Session as SdkSession, SyncSettings,
 };
@@ -26,6 +27,7 @@ struct VoyagerBot {
 
 impl VoyagerBot {
     pub fn new(client: Client) -> Self {
+        info!("Got new bot");
         Self { client }
     }
 }
@@ -82,11 +84,36 @@ impl EventHandler for VoyagerBot {
             } else {
                 return;
             };
+            let event_id = event.event_id.clone();
+
+            if msg_body.contains("!help") && room.is_direct() {
+                info!("Sending help");
+                room.typing_notice(true)
+                    .await
+                    .expect("Can't send typing event");
+                let content = AnyMessageEventContent::RoomMessage(
+                    MessageEventContent::notice_html(
+                        r#"Hi! I am the server_stats Discovery bot by @mtrnord:nordgedanken.dev ! \n\n\n
+                    What am I doing?\n\n I am a bot discovering matrix rooms. I am just looking for tasty room aliases :) I do not save your content!\n\n
+                    How do I get removed?\n\n Its simple! Just ban me and I will not come back :)\n\n
+                    Where can I learn more?\n\n You can either look at my source over at https://git.nordgedanken.dev/MTRNord/server_stats/-/tree/main or join #server_stats:nordgedanken.dev :)"#,
+                        r#"<h1>Hi! I am the server_stats Discovery bot by <a href=\"https://matrix.to/#/@mtrnord:nordgedanken.dev\">MTRNord</a></h1>\n\n\n
+                        <h2>What am I doing?</h2>\n\n I am a bot discovering matrix rooms. I am just looking for tasty room aliases :) I do not read the actual content or save it!\n\n
+                        <h2>How do I get removed?</h2>\n\n Its simple! Just ban me and I will not come back :)\n\n
+                        <h2>Where can I learn more?</h2>\n\n You can either look at my source over at https://git.nordgedanken.dev/MTRNord/server_stats/-/tree/main or join <a href=\"https://matrix.to/#/#server_stats:nordgedanken.dev\">#server_stats:nordgedanken.dev</a> :)"#,
+                    ),
+                );
+                room.send(content, None).await.unwrap();
+
+                room.typing_notice(false)
+                    .await
+                    .expect("Can't send typing event");
+            }
 
             // Handle message
             let client = self.client.clone();
             tokio::spawn(async move {
-                VoyagerBot::process_message(client, &msg_body, room).await;
+                VoyagerBot::process_message(client, &msg_body, room, Some(event_id)).await;
             });
         }
     }
@@ -202,6 +229,7 @@ impl VoyagerBot {
                                                         client,
                                                         &text_content.body,
                                                         parent_room,
+                                                        None,
                                                     )
                                                     .await;
                                                 });
@@ -239,11 +267,22 @@ impl VoyagerBot {
     }
 
     #[async_recursion::async_recursion]
-    async fn process_message(client: Client, msg_body: &str, room: Joined) {
+    async fn process_message(
+        client: Client,
+        msg_body: &str,
+        room: Joined,
+        event_id: Option<EventId>,
+    ) {
         // Regex is taken from https://github.com/turt2live/matrix-voyager-bot/blob/c6c9a1f2b2ee7b3a531a70646375915e5f6e4000/src/VoyagerBot.js#L96
         let re = Regex::new(r"[#!][a-zA-Z0-9.\-_#=]+:[a-zA-Z0-9.\-_]+[a-zA-Z0-9]").unwrap();
         if !re.is_match(&msg_body) {
             return;
+        }
+
+        if let Some(event_id) = event_id {
+            room.read_marker(&event_id, None)
+                .await
+                .expect("Can't send read marker event");
         }
         for cap in re.captures_iter(&msg_body) {
             let room_alias = cap[0].to_string();
@@ -312,6 +351,7 @@ pub async fn login_and_sync(
         .set_event_handler(Box::new(VoyagerBot::new(client.clone())))
         .await;
 
+    info!("start sync");
     client.sync(SyncSettings::default()).await;
     println!("failed");
     Ok(())

@@ -1,4 +1,6 @@
 #![deny(unsafe_code)]
+use std::{thread::sleep, time::Duration};
+
 use crate::{bot::login_and_sync, config::Config, database::cache::CacheDb, scraping::InfluxDb};
 use clap::Clap;
 use color_eyre::eyre::Result;
@@ -29,8 +31,7 @@ pub static CACHE_DB: Lazy<CacheDb> = Lazy::new(CacheDb::new);
 pub static APP_USER_AGENT: &str = concat!("MTRNord/", env!("CARGO_PKG_NAME"),);
 
 pub static INFLUX_CLIENT: Lazy<InfluxDb> = Lazy::new(InfluxDb::new);
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     color_eyre::install()?;
 
     let filter = EnvFilter::from_default_env()
@@ -40,7 +41,7 @@ async fn main() -> Result<()> {
         // any directives parsed from the env variable.
         .add_directive("server_stats=info".parse()?)
         .add_directive("sled=info".parse()?)
-        //.add_directive("matrix_sdk=debug".parse()?)
+        .add_directive("matrix_sdk=info".parse()?)
         .add_directive("rustls::session=off".parse()?);
 
     tracing_subscriber::fmt()
@@ -55,14 +56,16 @@ async fn main() -> Result<()> {
     info!("Loading Configs...");
     let config = Config::load(opts.config)?;
     CONFIG.set(config);
+
     let cpu_pool = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();
+
     let handle = cpu_pool.handle().clone();
     std::thread::spawn(move || {
         #[allow(clippy::redundant_clone)]
-        handle.clone().spawn(async move {
+        handle.clone().block_on(async move {
             let _guard = handle.enter();
             if let Some(ref bot_config) = crate::CONFIG.get().unwrap().bot {
                 info!("Starting Bot...");
@@ -75,31 +78,43 @@ async fn main() -> Result<()> {
                 {
                     error!("Failed to login or start sync: {}", e);
                 };
+
+                info!("Dead Bot...");
             }
         });
     });
 
-    let config = crate::CONFIG.get().expect("unable to get config");
-    let postgres_url = config.postgres.url.as_ref();
-    let pool = PgPoolOptions::new()
-        .max_connections(100)
-        .connect(postgres_url)
-        .await?;
+    let shedule_runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
 
-    // Get servers once
-    if let Err(e) = crate::jobs::find_servers(&pool).await {
-        error!("Error servers: {}", e);
-    }
+    let _guard = shedule_runtime.enter();
+    shedule_runtime.block_on(async move {
+        let config = crate::CONFIG.get().expect("unable to get config");
+        let postgres_url = config.postgres.url.as_ref();
+        let pool = PgPoolOptions::new()
+            .max_connections(100)
+            .connect(postgres_url)
+            .await;
+        if let Ok(pool) = pool {
+            // Get servers once
+            if let Err(e) = crate::jobs::find_servers(&pool).await {
+                error!("Error servers: {}", e);
+            }
 
-    if let Err(e) = crate::jobs::update_versions().await {
-        error!("Error versions: {}", e);
-    }
+            if let Err(e) = crate::jobs::update_versions().await {
+                error!("Error versions: {}", e);
+            }
 
-    // Starting sheduler
-    info!("Starting sheduler");
-    PG_POOL.set(pool);
+            // Starting sheduler
+            info!("Starting sheduler");
+            PG_POOL.set(pool);
+            start_queue().await.unwrap();
+        }
+    });
 
-    let handle = tokio::runtime::Handle::current();
+    let handle = shedule_runtime.handle().clone();
     ctrlc::set_handler(move || {
         handle.spawn(async {
             PG_POOL.get().unwrap().close().await;
@@ -107,10 +122,9 @@ async fn main() -> Result<()> {
         });
     })
     .expect("Error setting Ctrl-C handler");
-
-    start_queue().await.unwrap();
-
-    Ok(())
+    loop {
+        sleep(Duration::from_secs(2000000));
+    }
 }
 
 async fn start_queue() -> Result<()> {
