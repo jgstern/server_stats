@@ -58,6 +58,7 @@ async fn main() -> Result<()> {
     let config = Config::load(opts.config)?;
     CONFIG.set(config);
 
+    info!("Starting bot thread...");
     tokio::spawn(async move {
         if let Some(ref bot_config) = crate::CONFIG.get().unwrap().bot {
             info!("Starting Bot...");
@@ -75,6 +76,7 @@ async fn main() -> Result<()> {
         }
     });
 
+    info!("Connecting to postgres...");
     let config = crate::CONFIG.get().expect("unable to get config");
     let postgres_url = config.postgres.url.as_ref();
     let pool = PgPoolOptions::new()
@@ -96,6 +98,8 @@ async fn main() -> Result<()> {
         PG_POOL.set(pool);
         start_queue().await.unwrap();
     };
+
+    info!("Hooking up ctrl c handler...");
     tokio::signal::ctrl_c()
         .await
         .expect("failed to listen for event");
