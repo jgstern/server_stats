@@ -55,9 +55,15 @@ async fn main() -> Result<()> {
     info!("Loading Configs...");
     let config = Config::load(opts.config)?;
     CONFIG.set(config);
-    let handle = tokio::runtime::Handle::current();
+    let cpu_pool = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let handle = cpu_pool.handle().clone();
     std::thread::spawn(move || {
-        handle.spawn(async move {
+        #[allow(clippy::redundant_clone)]
+        handle.clone().spawn(async move {
+            let _guard = handle.enter();
             if let Some(ref bot_config) = crate::CONFIG.get().unwrap().bot {
                 info!("Starting Bot...");
                 if let Err(e) = login_and_sync(

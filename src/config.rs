@@ -2,29 +2,29 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct Config<'a> {
-    pub postgres: Postgres<'a>,
-    pub influxdb: InfluxDb<'a>,
-    pub bot: Option<Bot<'a>>,
+pub struct Config<'input> {
+    pub postgres: Postgres<'input>,
+    pub influxdb: InfluxDb<'input>,
+    pub bot: Option<Bot<'input>>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct Postgres<'a> {
-    pub url: Cow<'a, str>,
-    pub query: Cow<'a, str>,
+pub struct Postgres<'input> {
+    pub url: Cow<'input, str>,
+    pub query: Cow<'input, str>,
 }
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct InfluxDb<'a> {
-    pub host: Cow<'a, str>,
-    pub token: Cow<'a, str>,
-    pub org: Cow<'a, str>,
-    pub bucket: Cow<'a, str>,
+pub struct InfluxDb<'input> {
+    pub host: Cow<'input, str>,
+    pub token: Cow<'input, str>,
+    pub org: Cow<'input, str>,
+    pub bucket: Cow<'input, str>,
 }
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct Bot<'a> {
-    pub homeserver_url: Cow<'a, str>,
-    pub mxid: Cow<'a, str>,
-    pub password: Cow<'a, str>,
+pub struct Bot<'input> {
+    pub homeserver_url: Cow<'input, str>,
+    pub mxid: Cow<'input, str>,
+    pub password: Cow<'input, str>,
 }
 
 impl Config<'_> {

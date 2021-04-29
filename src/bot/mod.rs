@@ -1,4 +1,3 @@
-use futures::future::{BoxFuture, FutureExt};
 use matrix_sdk::{
     self,
     api::r0::filter::RoomEventFilter,
@@ -9,8 +8,8 @@ use matrix_sdk::{
         room::message::{MessageEventContent, MessageType, TextMessageEventContent},
         AnyMessageEvent, AnyRoomEvent, StrippedStateEvent, SyncMessageEvent,
     },
-    identifiers::RoomIdOrAliasId,
-    room::Room,
+    identifiers::{RoomId, RoomIdOrAliasId},
+    room::{Joined, Room},
     uint, Client, ClientConfig, EventHandler, Session as SdkSession, SyncSettings,
 };
 use regex::Regex;
@@ -69,7 +68,7 @@ impl EventHandler for VoyagerBot {
         }
     }
     async fn on_room_message(&self, room: Room, event: &SyncMessageEvent<MessageEventContent>) {
-        if let Room::Joined(_) = room {
+        if let Room::Joined(room) = room {
             let msg_body = if let SyncMessageEvent {
                 content:
                     MessageEventContent {
@@ -79,111 +78,181 @@ impl EventHandler for VoyagerBot {
                 ..
             } = event
             {
-                msg_body
+                msg_body.clone()
             } else {
                 return;
             };
 
             // Handle message
-            let cloned_self = self.clone();
-            let cloned_msg_body = msg_body.clone();
+            let client = self.client.clone();
             tokio::spawn(async move {
-                cloned_self.process_message(cloned_msg_body).await;
+                VoyagerBot::process_message(client, &msg_body, room).await;
             });
         }
     }
 }
 
 impl VoyagerBot {
-    // TODO save relations
-    fn process_message(&self, msg_body: String) -> BoxFuture<'_, ()> {
-        async move {
-            // Regex is taken from https://github.com/turt2live/matrix-voyager-bot/blob/c6c9a1f2b2ee7b3a531a70646375915e5f6e4000/src/VoyagerBot.js#L96
-            let re = Regex::new(r"[#!][a-zA-Z0-9.\-_#=]+:[a-zA-Z0-9.\-_]+[a-zA-Z0-9]").unwrap();
-            if !re.is_match(&msg_body) {
-                return;
-            }
-            for cap in re.captures_iter(&msg_body) {
-                let cloned_self = self.clone();
-                let server = cap[0].to_string();
-                //TODO only continue when we do not already scan that room or have scanned it
-                tokio::spawn(async move {
-                    // Got link
-                    info!("New room: {}", server);
-                    let room_id_or_alias = RoomIdOrAliasId::try_from(server).unwrap();
-                    let room_id = match cloned_self
-                        .client
-                        .join_room_by_id_or_alias(&room_id_or_alias, &[])
-                        .await
-                    {
-                        Ok(resp) => Some(resp.room_id),
-                        Err(e) => {
-                            error!("Failed to join room: {}", e);
-                            None
+    async fn try_join(client: Client, room_alias: String, parent_room: Joined) -> Option<RoomId> {
+        // TODO cache the room id of aliases if not tombstoned
+        let room_id_or_alias = RoomIdOrAliasId::try_from(room_alias.clone());
+        if let Ok(room_id_or_alias) = room_id_or_alias {
+            let room_id = match client
+                .join_room_by_id_or_alias(&room_id_or_alias, &[])
+                .await
+            {
+                Ok(resp) => Some(resp.room_id),
+                Err(e) => {
+                    error!("Failed to join room: {}", e);
+                    return None;
+                }
+            };
+            if let Some(ref room_id) = room_id {
+                let parent_id = parent_room.room_id().as_str();
+                if crate::CACHE_DB.graph.knows_room(room_id.as_str()) {
+                    if let Some(parent) = crate::CACHE_DB.graph.get_parent(room_id.as_str()) {
+                        if parent.as_ref() != parent_id {
+                            // We know the room and only want to do the new relation
+                            if let Err(e) =
+                                crate::CACHE_DB.graph.add_child(parent_id, room_id.as_str())
+                            {
+                                error!("failed to save child: {}", e);
+                            }
                         }
-                    };
+                    }
+                    return None;
+                }
+                if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id.as_str()) {
+                    error!("failed to save child: {}", e);
+                }
 
-                    if let Some(room_id) = room_id {
-                        sleep(Duration::from_secs(5)).await;
-                        if let Some(Room::Joined(room)) = cloned_self.client.get_room(&room_id) {
-                            let prev_batch = room.last_prev_batch().unwrap();
-                            let mut filter = RoomEventFilter::empty();
-                            let types = vec!["m.room.message".to_string()];
-                            filter.types = Some(&types);
-                            let mut request =
-                                MessagesRequest::new(&room_id, &prev_batch, Direction::Backward);
-                            request.limit = uint!(30);
-                            request.filter = Some(filter.clone());
-                            let resp = room
-                                .messages(request)
-                                .await
-                                .expect("failed to get older events");
+                info!(
+                    "New room relation: {:?} -> {}",
+                    parent_room.display_name().await,
+                    room_alias
+                );
+            }
+
+            return room_id;
+        }
+        None
+    }
+    async fn search_new_room(client: Client, room_alias: String, parent_room: Joined) {
+        // Got link
+        // Join new room
+        let room_id = VoyagerBot::try_join(client.clone(), room_alias, parent_room.clone()).await;
+
+        // If we got the room_id continue
+        if let Some(room_id) = room_id {
+            // Wait for sync to roughly complete
+            sleep(Duration::from_secs(5)).await;
+
+            // Get the room object
+            if let Some(Room::Joined(room)) = client.get_room(&room_id) {
+                // Get one level back in history
+
+                // Get prev_batch id
+                let prev_batch = room.last_prev_batch();
+                if let Some(prev_batch) = prev_batch {
+                    // Make filter for what we care about
+                    let mut filter = RoomEventFilter::empty();
+                    let types = vec!["m.room.message".to_string()];
+                    filter.types = Some(&types);
+
+                    // Prepare request
+                    let mut request =
+                        MessagesRequest::new(&room_id, &prev_batch, Direction::Backward);
+                    request.limit = uint!(30);
+                    request.filter = Some(filter.clone());
+
+                    // Run request
+                    let resp = room.messages(request).await;
+
+                    match resp {
+                        Ok(resp) => {
+                            // Iterate as long as chung is not empty
                             let mut chunk = resp.chunk;
-                            while !chunk.is_empty() {
-                                for message in chunk {
+                            let mut failed = false;
+
+                            let mut from = prev_batch;
+                            let mut end: String = resp.end.clone().unwrap();
+                            while !chunk.is_empty() && !failed && from != end {
+                                // For each message we recursivly do this again
+                                for message in &chunk {
                                     let deserialized_message = message.deserialize();
                                     if let Ok(AnyRoomEvent::Message(
                                         AnyMessageEvent::RoomMessage(message),
                                     )) = deserialized_message
                                     {
+                                        // Ignore messages sent by us
                                         let sender = message.sender;
-                                        if cloned_self.client.user_id().await.unwrap() == sender {
+                                        if client.user_id().await.unwrap() == sender {
                                             continue;
                                         }
 
                                         let content = message.content.msgtype;
                                         if let MessageType::Text(text_content) = content {
-                                            let cloned_self = cloned_self.clone();
+                                            let client = client.clone();
 
-                                            tokio::spawn(async move {
-                                                cloned_self
-                                                    .process_message(text_content.body)
+                                            // Make sure we explicitly do not want to wait on this
+                                            {
+                                                let parent_room = room.clone();
+                                                tokio::spawn(async move {
+                                                    VoyagerBot::process_message(
+                                                        client,
+                                                        &text_content.body,
+                                                        parent_room,
+                                                    )
                                                     .await;
-                                            });
+                                                });
+                                            }
                                         }
                                     }
                                 }
-                                // Try further
-                                let prev_batch = resp.end.clone().unwrap();
-                                let mut request = MessagesRequest::new(
-                                    &room_id,
-                                    &prev_batch,
-                                    Direction::Backward,
-                                );
+
+                                sleep(Duration::from_secs(2)).await;
+                                // Try getting older messages
+                                let mut request =
+                                    MessagesRequest::new(&room_id, &end, Direction::Backward);
                                 request.limit = uint!(30);
                                 request.filter = Some(filter.clone());
-                                let previous = room
-                                    .messages(request)
-                                    .await
-                                    .expect("failed to get older events");
-                                chunk = previous.chunk;
+                                let previous = room.messages(request).await;
+
+                                if let Ok(previous) = previous {
+                                    // Set new chunk to make sure we iterate the correct data in the next round
+                                    chunk = previous.chunk;
+                                    from = end;
+                                    end = previous.end.clone().unwrap()
+                                } else {
+                                    failed = true;
+                                }
                             }
                         }
+                        Err(e) => {
+                            // Todo remove room if `Http(FromHttpResponse(Http(Known(Error { kind: Forbidden, message: "Host not in room.", status_code: 403 }))))` is returned
+                            error!("Failed to get older events: {}", e);
+                        }
                     }
-                });
+                }
             }
         }
-        .boxed()
+    }
+
+    #[async_recursion::async_recursion]
+    async fn process_message(client: Client, msg_body: &str, room: Joined) {
+        // Regex is taken from https://github.com/turt2live/matrix-voyager-bot/blob/c6c9a1f2b2ee7b3a531a70646375915e5f6e4000/src/VoyagerBot.js#L96
+        let re = Regex::new(r"[#!][a-zA-Z0-9.\-_#=]+:[a-zA-Z0-9.\-_]+[a-zA-Z0-9]").unwrap();
+        if !re.is_match(&msg_body) {
+            return;
+        }
+        for cap in re.captures_iter(&msg_body) {
+            let room_alias = cap[0].to_string();
+
+            let client = client.clone();
+
+            let room = room.clone();
+            tokio::spawn(VoyagerBot::search_new_room(client, room_alias, room));
+        }
     }
 }
 

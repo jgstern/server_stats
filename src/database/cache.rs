@@ -8,7 +8,7 @@ use tracing::{error, info};
 #[derive(Debug)]
 pub struct CacheDb {
     db: sled::Db,
-    graph: GraphDb,
+    pub graph: GraphDb,
 }
 
 impl CacheDb {
@@ -97,8 +97,11 @@ impl Default for CacheDb {
             .use_compression(true)
             .open()
             .unwrap();
-        let tree = db.open_tree(b"graph").unwrap();
-        let graph = GraphDb::new(tree);
+        let hash_map = db.open_tree(b"hash_map").unwrap();
+        let state = db.open_tree(b"state").unwrap();
+        let parent_child = db.open_tree(b"parent_child").unwrap();
+        let child_parent = db.open_tree(b"child_parent").unwrap();
+        let graph = GraphDb::new(hash_map, state, parent_child, child_parent);
         CacheDb { db, graph }
     }
 }
