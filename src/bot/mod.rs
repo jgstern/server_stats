@@ -1,9 +1,16 @@
 use matrix_sdk::{
     self,
+    api::r0::config::get_global_account_data::Request as GlobalAccountDataGetRequest,
+    api::r0::config::set_global_account_data::Request as GlobalAccountDataSetRequest,
     api::r0::filter::RoomEventFilter,
-    api::r0::message::get_message_events::{Direction, Request as MessagesRequest},
+    api::r0::{
+        filter::{FilterDefinition, LazyLoadOptions, RoomFilter},
+        message::get_message_events::{Direction, Request as MessagesRequest},
+        sync::sync_events::Filter,
+    },
     async_trait,
     events::{
+        direct::DirectEventContent,
         room::member::MemberEventContent,
         room::message::{MessageEventContent, MessageType, TextMessageEventContent},
         AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, StrippedStateEvent,
@@ -11,11 +18,11 @@ use matrix_sdk::{
     },
     identifiers::{EventId, RoomId, RoomIdOrAliasId},
     room::{Joined, Room},
-    uint, Client, ClientConfig, EventHandler, Session as SdkSession, SyncSettings,
+    uint, Client, ClientConfig, EventHandler, Raw, Session as SdkSession, SyncSettings,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, path::PathBuf};
+use std::{collections::BTreeMap, convert::TryFrom, path::PathBuf};
 use tokio::time::{sleep, Duration};
 use tracing::{error, info};
 use url::Url;
@@ -66,6 +73,68 @@ impl EventHandler for VoyagerBot {
                     break;
                 }
             }
+            if let Some(is_direct) = room_member.content.is_direct {
+                if is_direct {
+                    let user_id = self.client.user_id().await.unwrap();
+                    let get_req = GlobalAccountDataGetRequest::new(&user_id, "m.direct");
+
+                    let sender = &room_member.sender;
+                    match self.client.send(get_req, None).await {
+                        Ok(old_direct) => {
+                            let raw = Raw::<DirectEventContent>::from_json(
+                                old_direct.account_data.into_json(),
+                            );
+                            let deserialized_message = raw.deserialize();
+                            match deserialized_message {
+                                Ok(mut contents) => {
+                                    info!("deserialized");
+                                    if contents.contains_key(sender) {
+                                        let mut cloned_contents = contents.clone();
+                                        let raw_content = cloned_contents.get_mut(sender);
+                                        if let Some(content) = raw_content {
+                                            content.push(room.room_id().clone());
+                                            contents.insert(sender.clone(), content.clone());
+                                        }
+                                    }
+
+                                    let rawed_contents: Raw<DirectEventContent> = contents.into();
+                                    // make new event
+                                    let set_request = GlobalAccountDataSetRequest::new(
+                                        rawed_contents.json(),
+                                        "m.direct",
+                                        &user_id,
+                                    );
+                                    if let Err(e) = self.client.send(set_request, None).await {
+                                        error!("Failed to set m.direct: {}", e);
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("unable to deserialize: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to get m.direct: {}", e);
+                            let mut hashmap: BTreeMap<String, serde_json::Value> = BTreeMap::new();
+                            hashmap.insert(
+                                sender.to_string(),
+                                serde_json::json!(vec![serde_json::json!(room.room_id().as_str())]),
+                            );
+                            let rawed_contents: Raw<BTreeMap<String, serde_json::Value>> =
+                                hashmap.into();
+                            // make new event
+                            let set_request = GlobalAccountDataSetRequest::new(
+                                rawed_contents.json(),
+                                "m.direct",
+                                &user_id,
+                            );
+                            if let Err(e) = self.client.send(set_request, None).await {
+                                error!("Failed to set m.direct: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
             info!("Successfully joined room {}", room.room_id());
         }
     }
@@ -86,6 +155,7 @@ impl EventHandler for VoyagerBot {
             };
             let event_id = event.event_id.clone();
 
+            //info!("msg_body: {}, is_direct: {}", msg_body, room.is_direct());
             if msg_body.contains("!help") && room.is_direct() {
                 info!("Sending help");
                 room.typing_notice(true)
@@ -97,10 +167,10 @@ impl EventHandler for VoyagerBot {
                     What am I doing?\n\n I am a bot discovering matrix rooms. I am just looking for tasty room aliases :) I do not save your content!\n\n
                     How do I get removed?\n\n Its simple! Just ban me and I will not come back :)\n\n
                     Where can I learn more?\n\n You can either look at my source over at https://git.nordgedanken.dev/MTRNord/server_stats/-/tree/main or join #server_stats:nordgedanken.dev :)"#,
-                        r#"<h1>Hi! I am the server_stats Discovery bot by <a href=\"https://matrix.to/#/@mtrnord:nordgedanken.dev\">MTRNord</a></h1>\n\n\n
-                        <h2>What am I doing?</h2>\n\n I am a bot discovering matrix rooms. I am just looking for tasty room aliases :) I do not read the actual content or save it!\n\n
-                        <h2>How do I get removed?</h2>\n\n Its simple! Just ban me and I will not come back :)\n\n
-                        <h2>Where can I learn more?</h2>\n\n You can either look at my source over at https://git.nordgedanken.dev/MTRNord/server_stats/-/tree/main or join <a href=\"https://matrix.to/#/#server_stats:nordgedanken.dev\">#server_stats:nordgedanken.dev</a> :)"#,
+                        r#"<h1>Hi! I am the server_stats Discovery bot by <a href=\"https://matrix.to/#/@mtrnord:nordgedanken.dev\">MTRNord</a></h1>
+                        <h2>What am I doing?</h2> I am a bot discovering matrix rooms. I am just looking for tasty room aliases :) I do not read the actual content or save it!
+                        <h2>How do I get removed?</h2> Its simple! Just ban me and I will not come back :)
+                        <h2>Where can I learn more?</h2> You can either look at my source over at https://git.nordgedanken.dev/MTRNord/server_stats/-/tree/main or join <a href=\"https://matrix.to/#/#server_stats:nordgedanken.dev\">#server_stats:nordgedanken.dev</a> :)"#,
                     ),
                 );
                 room.send(content, None).await.unwrap();
@@ -352,7 +422,21 @@ pub async fn login_and_sync(
         .await;
 
     info!("start sync");
-    client.sync(SyncSettings::default()).await;
+
+    let mut filter = FilterDefinition::default();
+    let mut room_filter = RoomFilter::default();
+    let mut event_filter = RoomEventFilter::default();
+
+    event_filter.lazy_load_options = LazyLoadOptions::Enabled {
+        include_redundant_members: false,
+    };
+    room_filter.state = event_filter;
+    filter.room = room_filter;
+    let filter_id = client.get_or_upload_filter("sync", filter).await.unwrap();
+
+    let sync_settings = SyncSettings::new().filter(Filter::FilterId(&filter_id));
+
+    client.sync(sync_settings).await;
     println!("failed");
     Ok(())
 }
