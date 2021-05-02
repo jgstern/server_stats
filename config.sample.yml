@@ -8,7 +8,13 @@ influxdb:
   bucket: "serverstats"
   org: ""
 
+api:
+  ip: 127.0.0.1
+  port: 9999
+
 #bot:
 #  homeserver_url: ""
 #  mxid: ""
 #  password: ""
+#  force_cleanup: false
+#  admin_access_token: ""

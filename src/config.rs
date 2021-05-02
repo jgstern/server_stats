@@ -6,6 +6,7 @@ pub struct Config<'input> {
     pub postgres: Postgres<'input>,
     pub influxdb: InfluxDb<'input>,
     pub bot: Option<Bot<'input>>,
+    pub api: Api<'input>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -25,6 +26,14 @@ pub struct Bot<'input> {
     pub homeserver_url: Cow<'input, str>,
     pub mxid: Cow<'input, str>,
     pub password: Cow<'input, str>,
+    pub force_cleanup: bool,
+    pub admin_access_token: Cow<'input, str>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Api<'input> {
+    pub ip: Cow<'input, str>,
+    pub port: u16,
 }
 
 impl Config<'_> {

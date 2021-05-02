@@ -1,3 +1,4 @@
+use chrono::{prelude::*, Duration as ChronoDuration};
 use matrix_sdk::{
     self,
     api::r0::config::get_global_account_data::Request as GlobalAccountDataGetRequest,
@@ -10,11 +11,12 @@ use matrix_sdk::{
     },
     async_trait,
     events::{
+        custom::CustomEventContent,
         direct::DirectEventContent,
         room::member::MemberEventContent,
         room::message::{MessageEventContent, MessageType, TextMessageEventContent},
-        AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, StrippedStateEvent,
-        SyncMessageEvent,
+        AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, AnyStateEventContent,
+        StrippedStateEvent, SyncMessageEvent,
     },
     identifiers::{EventId, RoomId, RoomIdOrAliasId},
     room::{Joined, Room},
@@ -26,7 +28,6 @@ use std::{collections::BTreeMap, convert::TryFrom, path::PathBuf};
 use tokio::time::{sleep, Duration};
 use tracing::{error, info};
 use url::Url;
-
 #[derive(Debug, Clone)]
 struct VoyagerBot {
     client: Client,
@@ -136,6 +137,7 @@ impl EventHandler for VoyagerBot {
                 }
             }
             info!("Successfully joined room {}", room.room_id());
+            // TODO scan joined room
         }
     }
     async fn on_room_message(&self, room: Room, event: &SyncMessageEvent<MessageEventContent>) {
@@ -190,6 +192,36 @@ impl EventHandler for VoyagerBot {
 }
 
 impl VoyagerBot {
+    async fn cleanup(room_id: String) -> color_eyre::Result<()> {
+        let now = Utc::now();
+        let time = now - ChronoDuration::days(2);
+        let timestamp = time.timestamp_millis();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()?;
+
+        if let Some(ref bot) = crate::CONFIG.get().unwrap().bot {
+            let server_address = &bot.homeserver_url;
+            let map = serde_json::json!({"delete_local_events": false, "purge_up_to_ts":timestamp});
+            let auth_header = format!("Bearer {}", bot.admin_access_token);
+            let url = format!(
+                "{}/_synapse/admin/v1/purge_history/{}",
+                server_address, room_id
+            );
+            info!("{}", url);
+            let body = client
+                .post(url.clone())
+                .header("Authorization", auth_header.clone())
+                .json(&map)
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            info!("Started cleanup for: {} = {:?}", url, body);
+        }
+        Ok(())
+    }
     async fn try_join(client: Client, room_alias: String, parent_room: Joined) -> Option<RoomId> {
         // TODO cache the room id of aliases if not tombstoned
         let room_id_or_alias = RoomIdOrAliasId::try_from(room_alias.clone());
@@ -200,16 +232,21 @@ impl VoyagerBot {
             {
                 Ok(resp) => Some(resp.room_id),
                 Err(e) => {
-                    error!("Failed to join room: {}", e);
+                    error!("Failed to join room ({}): {}", room_alias, e);
                     return None;
                 }
             };
             if let Some(ref room_id) = room_id {
                 let parent_id = parent_room.room_id().as_str();
+                let parent_displayname = parent_room.display_name().await;
                 if crate::CACHE_DB.graph.knows_room(room_id.as_str()) {
                     if let Some(parent) = crate::CACHE_DB.graph.get_parent(room_id.as_str()) {
                         if parent.as_ref() != parent_id {
                             // We know the room and only want to do the new relation
+                            info!(
+                                "New room relation for already known room: {:?} -> {}",
+                                parent_displayname, room_alias
+                            );
                             if let Err(e) =
                                 crate::CACHE_DB.graph.add_child(parent_id, room_id.as_str())
                             {
@@ -225,8 +262,7 @@ impl VoyagerBot {
 
                 info!(
                     "New room relation: {:?} -> {}",
-                    parent_room.display_name().await,
-                    room_alias
+                    parent_displayname, room_alias
                 );
             }
 
@@ -308,7 +344,8 @@ impl VoyagerBot {
                                     }
                                 }
 
-                                sleep(Duration::from_secs(2)).await;
+                                // TODO use if your synapse is bad again
+                                //sleep(Duration::from_secs(2)).await;
                                 // Try getting older messages
                                 let mut request =
                                     MessagesRequest::new(&room_id, &end, Direction::Backward);
@@ -333,6 +370,11 @@ impl VoyagerBot {
                     }
                 }
             }
+            tokio::spawn(async move {
+                if let Err(e) = VoyagerBot::cleanup(room_id.to_string()).await {
+                    error!("failed to clean: {}", e);
+                }
+            });
         }
     }
 
@@ -350,9 +392,9 @@ impl VoyagerBot {
         }
 
         if let Some(event_id) = event_id {
-            room.read_marker(&event_id, None)
-                .await
-                .expect("Can't send read marker event");
+            if let Err(e) = room.read_marker(&event_id, None).await {
+                error!("Can't send read marker event: {}", e);
+            }
         }
         for cap in re.captures_iter(&msg_body) {
             let room_alias = cap[0].to_string();
@@ -416,6 +458,39 @@ pub async fn login_and_sync(
     }
 
     info!("logged in as {}", username);
+    crate::MATRIX_CLIENT.set(client.clone());
+
+    tokio::spawn(async {
+        if let Some(client) = crate::MATRIX_CLIENT.get() {
+            let joined_rooms = client.joined_rooms().len();
+            //TODO make sure to filter only banned ones here .iter().filter(|x|{x.})
+            let banned_rooms = client.left_rooms().len();
+            let total = joined_rooms + banned_rooms;
+            info!("Total joined rooms: {}", total);
+            crate::ROOMS_TOTAL_COUNTER.set(total as f64);
+            assert_eq!(crate::ROOMS_TOTAL_COUNTER.get() as i64, total as i64);
+
+            //TODO allow configuration
+            let room = crate::MATRIX_CLIENT.get().unwrap().get_joined_room(
+                &RoomId::try_from("!zeFBFCASPaEUIHzbqj:nordgedanken.dev").unwrap(),
+            );
+            if let Some(room) = room {
+                info!("Updating counter in public room");
+                let mut data = BTreeMap::new();
+                data.insert("link".to_string(), serde_json::json!(""));
+                data.insert("severity".to_string(), serde_json::json!("normal"));
+                data.insert("title".to_string(), serde_json::json!("Rooms found"));
+                data.insert("value".to_string(), serde_json::json!(total));
+                let state_event = AnyStateEventContent::Custom(CustomEventContent {
+                    event_type: "re.jki.counter".into(),
+                    data,
+                });
+                if let Err(e) = room.send_state_event(state_event, "rooms_found").await {
+                    error!("Failed to update room counter: {}", e);
+                }
+            }
+        }
+    });
 
     client
         .set_event_handler(Box::new(VoyagerBot::new(client.clone())))

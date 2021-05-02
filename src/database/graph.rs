@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use color_eyre::Result;
+use sled::IVec;
 #[derive(Debug)]
 pub struct GraphDb {
     hash_map: sled::Tree,
@@ -87,5 +88,12 @@ impl GraphDb {
             return res;
         }
         false
+    }
+
+    pub fn get_all_room_ids(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = sled::Result<IVec>> + Send + Sync {
+        let r = self.hash_map.iter();
+        r.values()
     }
 }
