@@ -208,7 +208,6 @@ impl VoyagerBot {
                 "{}/_synapse/admin/v1/purge_history/{}",
                 server_address, room_id
             );
-            info!("{}", url);
             let body = client
                 .post(url.clone())
                 .header("Authorization", auth_header.clone())
@@ -218,7 +217,10 @@ impl VoyagerBot {
                 .text()
                 .await?;
 
-            info!("Started cleanup for: {} = {:?}", url, body);
+            info!(
+                "Started cleanup for room ({}): {} = {:?}",
+                room_id, url, body
+            );
         }
         Ok(())
     }
@@ -392,7 +394,7 @@ impl VoyagerBot {
         }
 
         if let Some(event_id) = event_id {
-            if let Err(e) = room.read_marker(&event_id, None).await {
+            if let Err(e) = room.read_marker(&event_id, Some(&event_id)).await {
                 error!("Can't send read marker event: {}", e);
             }
         }
