@@ -1,7 +1,11 @@
 #![deny(unsafe_code)]
 
 use crate::{bot::login_and_sync, config::Config, database::cache::CacheDb, scraping::InfluxDb};
-use actix_web::{middleware::Logger, web, App, HttpServer};
+use actix_web::{
+    get,
+    middleware::{Compress, Logger},
+    web, App, HttpResponse, HttpServer, Responder,
+};
 use actix_web_prom::PrometheusMetricsBuilder;
 use chrono::{prelude::*, Duration};
 use clap::Clap;
@@ -30,7 +34,7 @@ mod scraping;
 
 #[derive(Clap)]
 struct Opts {
-    #[clap(short, long, default_value = "config.yml")]
+    #[clap(short, long, default_value = "./config.yml")]
     config: String,
 }
 
@@ -93,6 +97,12 @@ async fn force_cleanup() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[get("/relations")]
+async fn relations() -> impl Responder {
+    let data = crate::CACHE_DB.graph.get_json_relations();
+    HttpResponse::Ok().json(data.await)
 }
 
 #[actix_web::main]
@@ -193,13 +203,17 @@ async fn main() -> Result<()> {
         App::new()
             .wrap(Logger::default())
             .wrap(prometheus.clone())
+            .wrap(Compress::default())
             .service(web::resource("/health").to(|| actix_web::HttpResponse::Ok().finish()))
+            .service(relations)
     })
     .bind((config.api.ip.to_string(), config.api.port))?
     .run()
     .await?;
 
-    PG_POOL.get().unwrap().close().await;
+    if let Some(pool) = PG_POOL.get() {
+        pool.close().await;
+    }
     std::process::exit(0);
 }
 

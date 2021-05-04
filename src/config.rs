@@ -27,6 +27,7 @@ pub struct Bot<'input> {
     pub mxid: Cow<'input, str>,
     pub password: Cow<'input, str>,
     pub force_cleanup: bool,
+    pub force_reindex_of_joined_rooms: bool,
     pub admin_access_token: Cow<'input, str>,
 }
 

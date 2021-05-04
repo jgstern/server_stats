@@ -227,48 +227,64 @@ impl VoyagerBot {
     async fn try_join(client: Client, room_alias: String, parent_room: Joined) -> Option<RoomId> {
         // TODO cache the room id of aliases if not tombstoned
         let room_id_or_alias = RoomIdOrAliasId::try_from(room_alias.clone());
-        if let Ok(room_id_or_alias) = room_id_or_alias {
-            let room_id = match client
-                .join_room_by_id_or_alias(&room_id_or_alias, &[])
-                .await
-            {
-                Ok(resp) => Some(resp.room_id),
-                Err(e) => {
-                    error!("Failed to join room ({}): {}", room_alias, e);
-                    return None;
-                }
-            };
-            if let Some(ref room_id) = room_id {
-                let parent_id = parent_room.room_id().as_str();
-                let parent_displayname = parent_room.display_name().await;
-                if crate::CACHE_DB.graph.knows_room(room_id.as_str()) {
-                    if let Some(parent) = crate::CACHE_DB.graph.get_parent(room_id.as_str()) {
-                        if parent.as_ref() != parent_id {
-                            // We know the room and only want to do the new relation
-                            info!(
-                                "New room relation for already known room: {:?} -> {}",
-                                parent_displayname, room_alias
-                            );
-                            if let Err(e) =
-                                crate::CACHE_DB.graph.add_child(parent_id, room_id.as_str())
-                            {
-                                error!("failed to save child: {}", e);
+        match room_id_or_alias {
+            Ok(room_id_or_alias) => {
+                let room_id = if let Some(room) = client.joined_rooms().iter().find(|room| {
+                    if let Some(alias) = room.canonical_alias() {
+                        return alias == room_alias || *room.room_id() == room_alias;
+                    }
+                    *room.room_id() == room_alias
+                }) {
+                    Some(room.room_id().clone())
+                } else {
+                    let room_id = match client
+                        .join_room_by_id_or_alias(&room_id_or_alias, &[])
+                        .await
+                    {
+                        Ok(resp) => Some(resp.room_id),
+                        Err(e) => {
+                            error!("Failed to join room ({}): {}", room_alias, e);
+                            return None;
+                        }
+                    };
+                    room_id
+                };
+
+                if let Some(ref room_id) = room_id {
+                    let parent_id = parent_room.room_id().as_str();
+                    let parent_displayname = parent_room.display_name().await;
+                    if crate::CACHE_DB.graph.knows_room(room_id.as_str()) {
+                        if let Some(parent) = crate::CACHE_DB.graph.get_parent(room_id.as_str()) {
+                            if parent.as_ref() != parent_id {
+                                // We know the room and only want to do the new relation
+                                info!(
+                                    "New room relation for already known room: {:?} -> {}",
+                                    parent_displayname, room_alias
+                                );
+                                if let Err(e) =
+                                    crate::CACHE_DB.graph.add_child(parent_id, room_id.as_str())
+                                {
+                                    error!("failed to save child: {}", e);
+                                }
                             }
                         }
+                        return None;
                     }
-                    return None;
-                }
-                if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id.as_str()) {
-                    error!("failed to save child: {}", e);
+                    if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id.as_str()) {
+                        error!("failed to save child: {}", e);
+                    }
+
+                    info!(
+                        "New room relation: {:?} -> {}",
+                        parent_displayname, room_alias
+                    );
                 }
 
-                info!(
-                    "New room relation: {:?} -> {}",
-                    parent_displayname, room_alias
-                );
+                return room_id;
             }
-
-            return room_id;
+            Err(e) => {
+                error!("Found invalid alias ({}): {}", room_alias, e);
+            }
         }
         None
     }
@@ -311,7 +327,7 @@ impl VoyagerBot {
 
                             let mut from = prev_batch;
                             let mut end: String = resp.end.clone().unwrap();
-                            while !chunk.is_empty() && !failed && from != end {
+                            while !failed && from != end {
                                 // For each message we recursivly do this again
                                 for message in &chunk {
                                     let deserialized_message = message.deserialize();
@@ -347,7 +363,7 @@ impl VoyagerBot {
                                 }
 
                                 // TODO use if your synapse is bad again
-                                //sleep(Duration::from_secs(2)).await;
+                                sleep(Duration::from_secs(5)).await;
                                 // Try getting older messages
                                 let mut request =
                                     MessagesRequest::new(&room_id, &end, Direction::Backward);
@@ -359,10 +375,14 @@ impl VoyagerBot {
                                     // Set new chunk to make sure we iterate the correct data in the next round
                                     chunk = previous.chunk;
                                     from = end;
-                                    end = previous.end.clone().unwrap()
+                                    end = previous.end.clone().unwrap();
                                 } else {
                                     failed = true;
                                 }
+                            }
+
+                            if let Err(e) = VoyagerBot::cleanup(room_id.to_string()).await {
+                                error!("failed to clean: {}", e);
                             }
                         }
                         Err(e) => {
@@ -372,11 +392,6 @@ impl VoyagerBot {
                     }
                 }
             }
-            tokio::spawn(async move {
-                if let Err(e) = VoyagerBot::cleanup(room_id.to_string()).await {
-                    error!("failed to clean: {}", e);
-                }
-            });
         }
     }
 
@@ -494,6 +509,27 @@ pub async fn login_and_sync(
         }
     });
 
+    tokio::spawn(async move {
+        if let Some(bot) = &crate::CONFIG.get().unwrap().bot {
+            if bot.force_reindex_of_joined_rooms {
+                if let Some(client) = crate::MATRIX_CLIENT.get() {
+                    let rooms = client.joined_rooms();
+                    for room in rooms {
+                        let alias = if let Some(alias) = room.canonical_alias() {
+                            alias.to_string()
+                        } else {
+                            room.room_id().to_string()
+                        };
+                        info!("Starting reindex of: {}", alias);
+                        VoyagerBot::process_message(client.clone(), alias.as_str(), room, None)
+                            .await;
+                        //sleep(Duration::from_secs(2)).await;
+                    }
+                }
+            }
+        }
+    });
+
     client
         .set_event_handler(Box::new(VoyagerBot::new(client.clone())))
         .await;
@@ -532,7 +568,7 @@ pub struct Session {
 
 impl Session {
     pub fn save(&self) -> color_eyre::Result<()> {
-        let mut session_path = PathBuf::from("./store/session.json");
+        let mut session_path = PathBuf::from("./store/");
         info!("SessionPath: {:?}", session_path);
         std::fs::create_dir_all(&session_path)?;
         session_path.push("session.json");
@@ -541,7 +577,7 @@ impl Session {
     }
 
     pub fn load() -> Option<Self> {
-        let mut session_path = PathBuf::from("./store/session.json");
+        let mut session_path = PathBuf::from("./store/");
         session_path.push("session.json");
         let file = std::fs::File::open(session_path);
         match file {

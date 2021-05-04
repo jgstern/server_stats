@@ -5,4 +5,5 @@ perf.data*
 config.yml
 config.yaml
 /storage
+/storage_old
 /store
