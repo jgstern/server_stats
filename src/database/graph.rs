@@ -252,13 +252,16 @@ impl GraphDb {
 */
 #[derive(Serialize, Deserialize)]
 pub struct RelationsJson {
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub rooms: HashMap<String, RoomRelation>,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct RoomRelation {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub alias: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub links: Vec<Ref>,
 }
 
