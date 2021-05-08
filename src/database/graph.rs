@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use sled::{IVec, Iter};
 use std::{
     borrow::Cow,
-    collections::HashMap,
     convert::{TryFrom, TryInto},
 };
 use tracing::info;
@@ -70,10 +69,7 @@ impl GraphDb {
         self.parent_child
             .update_and_fetch(parent_hash.to_le_bytes(), |value_opt| {
                 if let Some(existing) = value_opt {
-                    let mut backing_bytes = sled::IVec::from(existing);
-
-                    let mut decoded: Vec<u128> =
-                        bincode::deserialize(&backing_bytes.as_mut()).unwrap();
+                    let mut decoded: Vec<u128> = bincode::deserialize(existing).unwrap();
 
                     if !decoded.contains(&child_hash) {
                         decoded.push(child_hash);
@@ -94,10 +90,7 @@ impl GraphDb {
         self.parent_child
             .update_and_fetch(child.to_le_bytes(), |value_opt| {
                 if let Some(existing) = value_opt {
-                    let mut backing_bytes = sled::IVec::from(existing);
-
-                    let mut decoded: Vec<u128> =
-                        bincode::deserialize(&backing_bytes.as_mut()).unwrap();
+                    let mut decoded: Vec<u128> = bincode::deserialize(existing).unwrap();
                     if !decoded.contains(&parent) {
                         decoded.push(parent);
                     }
@@ -150,7 +143,8 @@ impl GraphDb {
     }
 
     pub async fn get_json_relations(&self) -> RelationsJson {
-        let mut rooms = HashMap::new();
+        let mut nodes = Vec::new();
+        let mut all_links = Vec::new();
 
         fn fix_size(raw: &[u8]) -> [u8; 16] {
             raw.try_into().expect("slice with incorrect length")
@@ -200,17 +194,9 @@ impl GraphDb {
             )
             .collect();
 
-        info!("room_id_relations length: {}", room_id_relations.len());
         for ((parent_hash, parent), (child_hashes, _)) in room_id_relations {
             let parent_hash = base64::encode(parent_hash.to_le_bytes());
-            let child_refs: Vec<Ref> = child_hashes
-                .iter()
-                .map(|child_hash| {
-                    let child_hash = base64::encode(child_hash.to_le_bytes());
-                    Ref { ref_id: child_hash }
-                })
-                .filter(|reference| reference.ref_id != parent_hash)
-                .collect();
+
             // TODO fix that all links work. This might be missing childs that arent parenty anywhere
 
             if let Some(client) = crate::MATRIX_CLIENT.get() {
@@ -218,61 +204,103 @@ impl GraphDb {
                     client.get_joined_room(&RoomId::try_from(parent.clone()).unwrap())
                 {
                     let alias = if let Some(alias) = room.canonical_alias() {
-                        Some(alias.to_string())
+                        alias.to_string()
                     } else {
-                        None
+                        parent.clone()
                     };
                     let name = if let Ok(name) = room.display_name().await {
                         name
                     } else {
                         parent
                     };
-                    rooms.insert(
-                        parent_hash,
-                        RoomRelation {
-                            name: name.to_string(),
-                            alias,
-                            links: child_refs,
-                        },
-                    );
+
+                    let topic = if let Some(topic) = room.topic() {
+                        topic.to_string()
+                    } else {
+                        "".to_string()
+                    };
+                    let avatar_url = if let Some(avatar_url) = room.avatar_url() {
+                        avatar_url.to_string()
+                    } else {
+                        "".to_string()
+                    };
+                    //TODO remove seeding rooms
+                    if name == "MTRNord" {
+                        continue;
+                    }
+                    let mut links: Vec<Link> = child_hashes
+                        .iter()
+                        .map(|child_hash| base64::encode(child_hash.to_le_bytes()))
+                        .filter(|reference| *reference != parent_hash)
+                        .map(|child| Link {
+                            source: parent_hash.clone(),
+                            target: child,
+                            value: 1,
+                        })
+                        .collect();
+                    all_links.append(&mut links);
+                    nodes.push(RoomRelation {
+                        id: parent_hash,
+                        name: name.to_string(),
+                        alias,
+                        avatar: avatar_url,
+                        topic,
+                        weight: None,
+                    });
                 }
             }
         }
-        RelationsJson { rooms }
+
+        // Remove broken links
+        let mut indices = Vec::new();
+        for (index, link) in all_links.iter_mut().enumerate() {
+            if !nodes.iter().any(|x| x.id == link.target) {
+                indices.push(index);
+            }
+            if !nodes.iter().any(|x| x.id == link.source) {
+                indices.push(index);
+            }
+        }
+
+        for (often, index) in indices.iter().enumerate() {
+            all_links.remove(index - often);
+        }
+
+        for mut node in &mut nodes {
+            let links = all_links
+                .iter()
+                .filter(|x| x.source == node.id || x.target == node.id)
+                .count();
+            node.weight = Some(links);
+        }
+
+        info!("room_id_relations length: {}", nodes.len());
+        RelationsJson {
+            nodes,
+            links: all_links,
+        }
     }
 }
 
-/*
-{
-  "rooms": {
-    "ajdjfiojeioj": {"name": "Watercooler", "links": [{"$ref": "#/rooms/gejiogjio"}]},
-    "gejiogjio": {"name": "#offtopic", "links": [{"$ref": "#/rooms/ajdjfiojeioj"}]},
-  }
-}
-*/
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct RelationsJson {
-    #[serde(skip_serializing_if = "HashMap::is_empty")]
-    pub rooms: HashMap<String, RoomRelation>,
+    pub nodes: Vec<RoomRelation>,
+    pub links: Vec<Link>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Link {
+    pub source: String,
+    pub target: String,
+    pub value: i64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct RoomRelation {
+    pub id: String,
     pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub alias: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub links: Vec<Ref>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Ref {
-    #[serde(rename = "$ref")]
-    pub ref_id: String,
-}
-
-impl PartialEq for Ref {
-    fn eq(&self, other: &Self) -> bool {
-        self.ref_id == other.ref_id
-    }
+    pub alias: String,
+    pub avatar: String,
+    pub topic: String,
+    pub weight: Option<usize>,
 }

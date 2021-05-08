@@ -1,6 +1,12 @@
 #![deny(unsafe_code)]
 
-use crate::{bot::login_and_sync, config::Config, database::cache::CacheDb, scraping::InfluxDb};
+use crate::{
+    bot::login_and_sync,
+    config::Config,
+    database::cache::CacheDb,
+    scraping::InfluxDb,
+    webpage::{ar_page, assets, index_page, vr_page},
+};
 use actix_web::{
     get,
     middleware::{Compress, Logger},
@@ -31,6 +37,7 @@ mod errors;
 mod jobs;
 mod matrix;
 mod scraping;
+mod webpage;
 
 #[derive(Clap)]
 struct Opts {
@@ -205,6 +212,10 @@ async fn main() -> Result<()> {
             .wrap(prometheus.clone())
             .wrap(Compress::default())
             .service(web::resource("/health").to(|| actix_web::HttpResponse::Ok().finish()))
+            .service(web::resource("/").to(index_page))
+            .service(web::resource("/vr").to(vr_page))
+            .service(web::resource("/ar").to(ar_page))
+            .route("/assets/{filename:.*}", web::get().to(assets))
             .service(relations)
     })
     .bind((config.api.ip.to_string(), config.api.port))?

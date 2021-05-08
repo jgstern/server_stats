@@ -41,11 +41,21 @@ actix-web-prom = { git = "https://github.com/arthurlm/actix-web-prom.git",rev ="
 
 base64 = "0.13.0"
 chrono = "0.4"
+mime_guess = "2.0.3"
+[dependencies.askama]
+path = "../askama/askama"
+[dependencies.askama_actix]
+#git = "https://github.com/MTRNord/askama"
+#branch="actix-web-4"
+path = "../askama/askama_actix"
 
 [dependencies.matrix-sdk]
 git = "https://github.com/matrix-org/matrix-rust-sdk"
 rev = "ab180362c931606385dd53b73620d82ef2c3166d"
 
+[dependencies.rust-embed]
+version="5.9.0"
+features = ["debug-embed","compression"]
 
 [profile.release]
 opt-level = 2

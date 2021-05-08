@@ -14,12 +14,15 @@ use matrix_sdk::{
         custom::CustomEventContent,
         direct::DirectEventContent,
         room::member::MemberEventContent,
-        room::message::{MessageEventContent, MessageType, TextMessageEventContent},
+        room::{
+            message::{MessageEventContent, MessageType, TextMessageEventContent},
+            tombstone::TombstoneEventContent,
+        },
         AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, AnyStateEventContent,
-        StrippedStateEvent, SyncMessageEvent,
+        StrippedStateEvent, SyncMessageEvent, SyncStateEvent,
     },
     identifiers::{EventId, RoomId, RoomIdOrAliasId},
-    room::{Joined, Room},
+    room::{Invited, Joined, Room},
     uint, Client, ClientConfig, EventHandler, Raw, Session as SdkSession, SyncSettings,
 };
 use regex::Regex;
@@ -35,12 +38,14 @@ struct VoyagerBot {
 
 impl VoyagerBot {
     pub fn new(client: Client) -> Self {
-        info!("Got new bot");
         Self { client }
     }
 }
 #[async_trait]
 impl EventHandler for VoyagerBot {
+    async fn on_room_tombstone(&self, _: Room, _: &SyncStateEvent<TombstoneEventContent>) {
+        // TODO join and scan tombstoned room
+    }
     async fn on_stripped_state_member(
         &self,
         room: Room,
@@ -74,68 +79,7 @@ impl EventHandler for VoyagerBot {
                     break;
                 }
             }
-            if let Some(is_direct) = room_member.content.is_direct {
-                if is_direct {
-                    let user_id = self.client.user_id().await.unwrap();
-                    let get_req = GlobalAccountDataGetRequest::new(&user_id, "m.direct");
-
-                    let sender = &room_member.sender;
-                    match self.client.send(get_req, None).await {
-                        Ok(old_direct) => {
-                            let raw = Raw::<DirectEventContent>::from_json(
-                                old_direct.account_data.into_json(),
-                            );
-                            let deserialized_message = raw.deserialize();
-                            match deserialized_message {
-                                Ok(mut contents) => {
-                                    info!("deserialized");
-                                    if contents.contains_key(sender) {
-                                        let mut cloned_contents = contents.clone();
-                                        let raw_content = cloned_contents.get_mut(sender);
-                                        if let Some(content) = raw_content {
-                                            content.push(room.room_id().clone());
-                                            contents.insert(sender.clone(), content.clone());
-                                        }
-                                    }
-
-                                    let rawed_contents: Raw<DirectEventContent> = contents.into();
-                                    // make new event
-                                    let set_request = GlobalAccountDataSetRequest::new(
-                                        rawed_contents.json(),
-                                        "m.direct",
-                                        &user_id,
-                                    );
-                                    if let Err(e) = self.client.send(set_request, None).await {
-                                        error!("Failed to set m.direct: {}", e);
-                                    }
-                                }
-                                Err(e) => {
-                                    error!("unable to deserialize: {}", e);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to get m.direct: {}", e);
-                            let mut hashmap: BTreeMap<String, serde_json::Value> = BTreeMap::new();
-                            hashmap.insert(
-                                sender.to_string(),
-                                serde_json::json!(vec![serde_json::json!(room.room_id().as_str())]),
-                            );
-                            let rawed_contents: Raw<BTreeMap<String, serde_json::Value>> =
-                                hashmap.into();
-                            // make new event
-                            let set_request = GlobalAccountDataSetRequest::new(
-                                rawed_contents.json(),
-                                "m.direct",
-                                &user_id,
-                            );
-                            if let Err(e) = self.client.send(set_request, None).await {
-                                error!("Failed to set m.direct: {}", e);
-                            }
-                        }
-                    }
-                }
-            }
+            self.set_direct(room.clone(), room_member).await;
             info!("Successfully joined room {}", room.room_id());
             // TODO scan joined room
         }
@@ -192,6 +136,74 @@ impl EventHandler for VoyagerBot {
 }
 
 impl VoyagerBot {
+    async fn set_direct(
+        &self,
+        room: Invited,
+        room_member: &StrippedStateEvent<MemberEventContent>,
+    ) {
+        if let Some(is_direct) = room_member.content.is_direct {
+            if is_direct {
+                let user_id = self.client.user_id().await.unwrap();
+                let get_req = GlobalAccountDataGetRequest::new(&user_id, "m.direct");
+
+                let sender = &room_member.sender;
+                match self.client.send(get_req, None).await {
+                    Ok(old_direct) => {
+                        let raw = Raw::<DirectEventContent>::from_json(
+                            old_direct.account_data.into_json(),
+                        );
+                        let deserialized_message = raw.deserialize();
+                        match deserialized_message {
+                            Ok(mut contents) => {
+                                info!("deserialized");
+                                if contents.contains_key(sender) {
+                                    let mut cloned_contents = contents.clone();
+                                    let raw_content = cloned_contents.get_mut(sender);
+                                    if let Some(content) = raw_content {
+                                        content.push(room.room_id().clone());
+                                        contents.insert(sender.clone(), content.clone());
+                                    }
+                                }
+
+                                let rawed_contents: Raw<DirectEventContent> = contents.into();
+                                // make new event
+                                let set_request = GlobalAccountDataSetRequest::new(
+                                    rawed_contents.json(),
+                                    "m.direct",
+                                    &user_id,
+                                );
+                                if let Err(e) = self.client.send(set_request, None).await {
+                                    error!("Failed to set m.direct: {}", e);
+                                }
+                            }
+                            Err(e) => {
+                                error!("unable to deserialize: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to get m.direct: {}", e);
+                        let mut hashmap: BTreeMap<String, serde_json::Value> = BTreeMap::new();
+                        hashmap.insert(
+                            sender.to_string(),
+                            serde_json::json!(vec![serde_json::json!(room.room_id().as_str())]),
+                        );
+                        let rawed_contents: Raw<BTreeMap<String, serde_json::Value>> =
+                            hashmap.into();
+                        // make new event
+                        let set_request = GlobalAccountDataSetRequest::new(
+                            rawed_contents.json(),
+                            "m.direct",
+                            &user_id,
+                        );
+                        if let Err(e) = self.client.send(set_request, None).await {
+                            error!("Failed to set m.direct: {}", e);
+                        }
+                    }
+                }
+            }
+        }
+    }
     async fn cleanup(room_id: String) -> color_eyre::Result<()> {
         let now = Utc::now();
         let time = now - ChronoDuration::days(2);
@@ -224,8 +236,7 @@ impl VoyagerBot {
         }
         Ok(())
     }
-    async fn try_join(client: Client, room_alias: String, parent_room: Joined) -> Option<RoomId> {
-        // TODO cache the room id of aliases if not tombstoned
+    pub async fn try_join(client: Client, room_alias: String) -> Option<RoomId> {
         let room_id_or_alias = RoomIdOrAliasId::try_from(room_alias.clone());
         match room_id_or_alias {
             Ok(room_id_or_alias) => {
@@ -237,48 +248,17 @@ impl VoyagerBot {
                 }) {
                     Some(room.room_id().clone())
                 } else {
-                    let room_id = match client
+                    match client
                         .join_room_by_id_or_alias(&room_id_or_alias, &[])
                         .await
                     {
-                        Ok(resp) => Some(resp.room_id),
+                        Ok(resp) => return Some(resp.room_id),
                         Err(e) => {
                             error!("Failed to join room ({}): {}", room_alias, e);
                             return None;
                         }
                     };
-                    room_id
                 };
-
-                if let Some(ref room_id) = room_id {
-                    let parent_id = parent_room.room_id().as_str();
-                    let parent_displayname = parent_room.display_name().await;
-                    if crate::CACHE_DB.graph.knows_room(room_id.as_str()) {
-                        if let Some(parent) = crate::CACHE_DB.graph.get_parent(room_id.as_str()) {
-                            if parent.as_ref() != parent_id {
-                                // We know the room and only want to do the new relation
-                                info!(
-                                    "New room relation for already known room: {:?} -> {}",
-                                    parent_displayname, room_alias
-                                );
-                                if let Err(e) =
-                                    crate::CACHE_DB.graph.add_child(parent_id, room_id.as_str())
-                                {
-                                    error!("failed to save child: {}", e);
-                                }
-                            }
-                        }
-                        return None;
-                    }
-                    if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id.as_str()) {
-                        error!("failed to save child: {}", e);
-                    }
-
-                    info!(
-                        "New room relation: {:?} -> {}",
-                        parent_displayname, room_alias
-                    );
-                }
 
                 return room_id;
             }
@@ -291,15 +271,53 @@ impl VoyagerBot {
     async fn search_new_room(client: Client, room_alias: String, parent_room: Joined) {
         // Got link
         // Join new room
-        let room_id = VoyagerBot::try_join(client.clone(), room_alias, parent_room.clone()).await;
+        let room_id = VoyagerBot::try_join(client.clone(), room_alias.clone()).await;
 
         // If we got the room_id continue
         if let Some(room_id) = room_id {
+            let parent_id = parent_room.room_id().as_str();
+            let parent_displayname = parent_room.display_name().await;
+            if crate::CACHE_DB.graph.knows_room(room_id.as_str()) {
+                if let Some(parent) = crate::CACHE_DB.graph.get_parent(room_id.as_str()) {
+                    if parent.as_ref() != parent_id {
+                        // We know the room and only want to do the new relation
+                        info!(
+                            "New room relation for already known room: {:?} -> {}",
+                            parent_displayname, room_alias
+                        );
+                        if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id.as_str())
+                        {
+                            error!("failed to save child: {}", e);
+                        }
+                    }
+                } else {
+                    error!("We knew {} but didnt find a parent", room_alias);
+                    if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id.as_str()) {
+                        error!("failed to save child: {}", e);
+                    }
+
+                    info!(
+                        "New room relation: {:?} -> {}",
+                        parent_displayname, room_alias
+                    );
+                }
+                return;
+            } else {
+                if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id.as_str()) {
+                    error!("failed to save child: {}", e);
+                }
+
+                info!(
+                    "New room relation: {:?} -> {}",
+                    parent_displayname, room_alias
+                );
+            }
+
             // Wait for sync to roughly complete
             sleep(Duration::from_secs(5)).await;
 
             // Get the room object
-            if let Some(Room::Joined(room)) = client.get_room(&room_id) {
+            if let Some(room) = client.get_joined_room(&room_id) {
                 // Get one level back in history
 
                 // Get prev_batch id
@@ -362,8 +380,8 @@ impl VoyagerBot {
                                     }
                                 }
 
-                                // TODO use if your synapse is bad again
-                                sleep(Duration::from_secs(5)).await;
+                                // TODO use if your synapse is bad again. We should use a queue
+                                sleep(Duration::from_secs(2)).await;
                                 // Try getting older messages
                                 let mut request =
                                     MessagesRequest::new(&room_id, &end, Direction::Backward);
@@ -377,6 +395,7 @@ impl VoyagerBot {
                                     from = end;
                                     end = previous.end.clone().unwrap();
                                 } else {
+                                    // TODO we should probably try again
                                     failed = true;
                                 }
                             }
@@ -386,7 +405,7 @@ impl VoyagerBot {
                             }
                         }
                         Err(e) => {
-                            // Todo remove room if `Http(FromHttpResponse(Http(Known(Error { kind: Forbidden, message: "Host not in room.", status_code: 403 }))))` is returned
+                            // TODO remove room if `Http(FromHttpResponse(Http(Known(Error { kind: Forbidden, message: "Host not in room.", status_code: 403 }))))` is returned
                             error!("Failed to get older events: {}", e);
                         }
                     }
@@ -523,7 +542,6 @@ pub async fn login_and_sync(
                         info!("Starting reindex of: {}", alias);
                         VoyagerBot::process_message(client.clone(), alias.as_str(), room, None)
                             .await;
-                        //sleep(Duration::from_secs(2)).await;
                     }
                 }
             }

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<html>
+
+<head>
+    <title>Graph</title>
+    <style>
+        body {
+            margin: 0;
+        }
+
+        #graph {
+            overflow: hidden;
+        }
+
+        .scene-tooltip {
+            color: white !important;
+            background-color: #3b3b3d !important;
+            font-size: 1.1rem !important;
+            padding: 8px;
+            border-radius: 5px;
+        }
+
+        .scene-tooltip:empty {
+            visibility: hidden;
+        }
+
+        .scene-nav-info {
+            color: white !important;
+            font-size: 0.7rem !important;
+        }
+    </style>
+    <script src="//unpkg.com/3d-force-graph-vr"></script>
+</head>
+
+<body>
+    <div id="graph"></div>
+    <script>
+        const elem = document.getElementById('graph');
+
+        const Graph = ForceGraphVR()
+            (elem)
+            .backgroundColor('#101020')
+            .nodeRelSize(6)
+            .nodeAutoColorBy('name')
+            .nodeOpacity(0.95)
+            .nodeResolution(10)
+            .linkColor(() => 'rgba(255,255,255,0.2)')
+            .linkOpacity(0.8)
+            .linkWidth(2)
+            .linkDirectionalParticles(2)
+            .linkDirectionalParticleWidth(1)
+            .linkDirectionalParticleSpeed(0.003)
+            .onNodeHover(node => elem.style.cursor = node ? 'pointer' : null);
+        Graph.onNodeClick(node => {
+            if (node.alias !== "") {
+                // TODO urlencode alias
+                window.open(`https://matrix.to/#/${node.alias}`, '_blank').focus();
+            }
+        })
+            .jsonUrl('/relations');
+
+        /*setInterval(() => {
+            fetch('/relations').then(res => res.json()).then(data => {
+            const { nodes, links } = Graph.graphData();
+            let nodes_all = nodes.concat(data.nodes).unique();
+            let links_all = links.concat(data.links).unique();
+                Graph.graphData({ nodes: nodes_all, links: links_all });
+            });
+        }, 60000);*/
+
+    </script>
+</body>
+
+</html>
