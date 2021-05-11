@@ -1,0 +1,7 @@
+id: server_stats
+url: http://127.0.0.1:9009
+as_token: as_token
+hs_token: hs_token
+sender_localpart: server_stats
+namespaces:
+  users: []

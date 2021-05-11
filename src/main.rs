@@ -1,16 +1,21 @@
 #![deny(unsafe_code)]
 
 use crate::{
-    bot::login_and_sync,
+    appservice::generate_appservice,
     config::Config,
     database::cache::CacheDb,
     scraping::InfluxDb,
-    webpage::{ar_page, assets, index_page, vr_page},
+    webpage::{
+        ar_page, assets, index_page,
+        sse::{new_client, Broadcaster},
+        two_d_page, vr_page,
+    },
 };
 use actix_web::{
     get,
     middleware::{Compress, Logger},
-    web, App, HttpResponse, HttpServer, Responder,
+    web::{self, Data},
+    App, HttpResponse, HttpServer, Responder,
 };
 use actix_web_prom::PrometheusMetricsBuilder;
 use chrono::{prelude::*, Duration};
@@ -24,13 +29,17 @@ use matrix_sdk::{
 use once_cell::sync::{Lazy, OnceCell};
 use prometheus::{opts, register_gauge, Gauge, Registry};
 use sqlx::{postgres::PgPoolOptions, PgPool};
-use std::{collections::BTreeMap, convert::TryFrom};
+use std::{
+    collections::BTreeMap,
+    convert::TryFrom,
+    sync::{Arc, Mutex},
+};
 use tokio::time::sleep;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing::{error, info};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 
-mod bot;
+mod appservice;
 mod config;
 mod database;
 mod errors;
@@ -50,6 +59,10 @@ pub static ROOMS_TOTAL_COUNTER: Lazy<Gauge> = Lazy::new(|| {
     let opts = opts!("rooms_total", "Rooms statistics").namespace("server_stats");
     register_gauge!(opts).unwrap()
 });
+#[allow(clippy::redundant_closure)]
+#[allow(clippy::type_complexity)]
+pub static SSE_BROADCAST: Lazy<(Arc<Mutex<Broadcaster>>, Data<Arc<Mutex<Broadcaster>>>)> =
+    Lazy::new(|| Broadcaster::create());
 pub static MATRIX_CLIENT: OnceCell<Client> = OnceCell::new();
 pub static PG_POOL: OnceCell<PgPool> = OnceCell::new();
 pub static CACHE_DB: Lazy<CacheDb> = Lazy::new(CacheDb::new);
@@ -78,29 +91,30 @@ async fn force_cleanup() -> Result<()> {
             room_id
         })
         .collect();
-    if let Some(ref bot) = crate::CONFIG.get().unwrap().bot {
-        let server_address = &bot.homeserver_url;
-        let map = serde_json::json!({"delete_local_events": false, "purge_up_to_ts":timestamp});
-        let auth_header = format!("Bearer {}", bot.admin_access_token);
+    let server_address = &crate::CONFIG.get().unwrap().bot.homeserver_url;
+    let map = serde_json::json!({"delete_local_events": false, "purge_up_to_ts":timestamp});
+    let auth_header = format!(
+        "Bearer {}",
+        crate::CONFIG.get().unwrap().bot.admin_access_token
+    );
 
-        for room_id in room_ids {
-            let url = format!(
-                "{}/_synapse/admin/v1/purge_history/{}",
-                server_address, room_id
-            );
-            info!("{}", url);
-            let body = client
-                .post(url.clone())
-                .header("Authorization", auth_header.clone())
-                .json(&map)
-                .send()
-                .await?
-                .text()
-                .await?;
+    for room_id in room_ids {
+        let url = format!(
+            "{}/_synapse/admin/v1/purge_history/{}",
+            server_address, room_id
+        );
+        info!("{}", url);
+        let body = client
+            .post(url.clone())
+            .header("Authorization", auth_header.clone())
+            .json(&map)
+            .send()
+            .await?
+            .text()
+            .await?;
 
-            info!("{} = {:?}", url, body);
-            sleep(std::time::Duration::from_secs(5)).await;
-        }
+        info!("{} = {:?}", url, body);
+        sleep(std::time::Duration::from_secs(5)).await;
     }
 
     Ok(())
@@ -139,11 +153,9 @@ async fn main() -> Result<()> {
     let config = Config::load(opts.config)?;
     CONFIG.set(config);
 
-    if let Some(bot) = &CONFIG.get().unwrap().bot {
-        if bot.force_cleanup {
-            force_cleanup().await?;
-            return Ok(());
-        }
+    if crate::CONFIG.get().unwrap().bot.force_cleanup {
+        force_cleanup().await?;
+        return Ok(());
     }
 
     info!("Setting up prometheus...");
@@ -158,24 +170,6 @@ async fn main() -> Result<()> {
         .endpoint("/metrics")
         .build()
         .unwrap();
-
-    info!("Starting bot thread...");
-    tokio::spawn(async move {
-        if let Some(ref bot_config) = crate::CONFIG.get().unwrap().bot {
-            info!("Starting Bot...");
-            if let Err(e) = login_and_sync(
-                bot_config.homeserver_url.to_string(),
-                bot_config.mxid.to_string(),
-                bot_config.password.to_string(),
-            )
-            .await
-            {
-                error!("Failed to login or start sync: {}", e);
-            };
-
-            info!("Dead Bot...");
-        }
-    });
 
     tokio::spawn(async move {
         info!("Connecting to postgres...");
@@ -206,17 +200,24 @@ async fn main() -> Result<()> {
     info!("Starting webserver...");
 
     let config = crate::CONFIG.get().expect("unable to get config");
+
+    let appservice = generate_appservice(&config).await;
+
     HttpServer::new(move || {
         App::new()
+            .app_data(SSE_BROADCAST.1.clone())
             .wrap(Logger::default())
             .wrap(prometheus.clone())
             .wrap(Compress::default())
+            .route("/events", web::get().to(new_client))
             .service(web::resource("/health").to(|| actix_web::HttpResponse::Ok().finish()))
             .service(web::resource("/").to(index_page))
+            .service(web::resource("/2d").to(two_d_page))
             .service(web::resource("/vr").to(vr_page))
             .service(web::resource("/ar").to(ar_page))
             .route("/assets/{filename:.*}", web::get().to(assets))
             .service(relations)
+            .service(appservice.actix_service())
     })
     .bind((config.api.ip.to_string(), config.api.port))?
     .run()

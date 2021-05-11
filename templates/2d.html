@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<html>
+
+<head>
+    <title>Matrix in 3D</title>
+    <meta property="og:description" content="A 3D Graph of Matrix generated using the server_stats voyager bot" />
+    <meta property="og:image" content="/assets/graph.png" />
+    <style>
+        body {
+            margin: 0;
+            background-color: #101020;
+        }
+
+        #graph {
+            overflow: hidden;
+        }
+
+        .scene-tooltip {
+            color: white !important;
+            background-color: #3b3b3d !important;
+            font-size: 1.1rem !important;
+            padding: 8px;
+            border-radius: 5px;
+        }
+
+        .scene-tooltip:empty {
+            visibility: hidden;
+        }
+
+        .scene-nav-info {
+            color: white !important;
+            font-size: 0.7rem !important;
+        }
+
+        #info {
+            font-family: 'Roboto', sans-serif;
+            font-weight: 400;
+            background-color: #3B3B3D;
+            color: white;
+            position: fixed;
+            top: 1.5rem;
+            right: 1.5rem;
+            border-radius: 5px;
+            text-align: center;
+            display: flex;
+            padding: 0.5rem;
+            flex-wrap: wrap;
+            flex-direction: column;
+        }
+
+        #link_count {
+            margin: 0;
+        }
+
+        #room_count {
+            margin: 0;
+            margin-bottom: 0.1rem;
+        }
+
+
+        #sidebar {
+            --animate-duration: 0.8s;
+            font-family: 'Roboto', sans-serif;
+            font-weight: 400;
+            color: white;
+            background-color: #3B3B3D;
+            width: 24.063rem;
+            height: 37.313rem;
+            display: none;
+
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            border-radius: 10px;
+            align-content: flex-start;
+        }
+
+        @keyframes hide {
+            0% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0;
+            }
+        }
+
+        #sidebar a:link {
+            color: #4157C9;
+        }
+
+        #sidebar a:visited {
+            color: #4157C9;
+        }
+
+        #sidebar a:hover {
+            color: #4157C9;
+        }
+
+        #sidebar a:active {
+            color: #4157C9;
+        }
+
+        .wrapper {
+            width: 100%;
+            height: 100%;
+        }
+
+        #close {
+            font-weight: 100;
+            font-size: 3rem;
+            position: absolute;
+            right: 1rem;
+            top: -0.438rem;
+            display: inline;
+        }
+
+        .close_anim {
+            animation: hide .8s ease-in-out;
+        }
+
+        #header {
+            font-weight: 700;
+            font-size: 1.5rem;
+            display: inline;
+        }
+
+        #top {
+            display: flex;
+            align-items: center;
+            justify-content: left;
+        }
+
+        #avatar {
+            position: relative;
+            margin-left: 1rem;
+            margin-right: 1rem;
+            display: inline;
+            border-radius: 50px;
+            width: 48px;
+            height: 48px;
+        }
+
+        #content {
+            position: absolute;
+            padding-left: 1rem;
+            padding-right: 1rem;
+            padding-bottom: 1rem;
+            padding-top: 2.438rem;
+            display: inline;
+            z-index: -9999999;
+        }
+
+        #description {
+            position: relative;
+        }
+
+        #divider {
+            border: 1px solid #E3E3E3;
+        }
+
+        #link {
+            position: relative;
+            font-size: 0.875rem;
+            font-weight: 500;
+            display: none;
+        }
+
+        .break {
+            flex-basis: 100%;
+            height: 0;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" />
+    <link rel="preconnect" href="https://fonts.gstatic.com">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@100;400;500;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="wrapper">
+        <div id="graph"></div>
+        <div id="info">
+            <p id="room_count"></p>
+            <div class="break"></div>
+            <p id="link_count"></p>
+        </div>
+        <div id="sidebar">
+            <div id="close">×</div>
+            <div id="content">
+                <div id="top">
+                    <p id="header"></p>
+                    <img id="avatar"></img>
+                </div>
+                <hr id="divider" />
+                <p id="description"></p>
+                <p id="link">Join room:&nbsp;<a rel="noreferrer" id="alias_link" target='_blank' href="#"></a></p>
+
+            </div>
+        </div>
+    </div>
+
+    <script src="//unpkg.com/3d-force-graph"></script>
+    <script src="https://cdn.jsdelivr.net/npm/linkifyjs@2.1.9/dist/linkify.min.js"
+        integrity="sha256-b8aRDYEOoOLGpyaXMI3N2nWUbjSeQ2QxzKjmPnCa4yA=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/linkifyjs@2.1.9/dist/linkify-string.min.js"
+        integrity="sha256-FyCQ9XVSgI4tV3R0ldp8nZkLYPYBwRznvSeFME7tXJ8=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"
+        integrity="sha256-qXBd/EfAdjOA2FGrGAG+b3YBn2tn5A6bhz+LSgYD96k=" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/d3-force-3d"></script>
+    <script type="module">
+        import { UnrealBloomPass } from '//cdn.skypack.dev/three/examples/jsm/postprocessing/UnrealBloomPass.js';
+        const elem = document.getElementById('graph');
+        const sidebar = document.querySelector('#sidebar');
+        const close = document.querySelector('#close');
+        const header = document.querySelector('#header');
+        const description = document.querySelector('#description');
+        const alias_link = document.querySelector('#alias_link');
+        const avatar = document.querySelector('#avatar');
+        const room_count = document.querySelector('#room_count');
+        const link_count = document.querySelector('#link_count');
+
+
+        sidebar.addEventListener('animationend', (e) => {
+            e.preventDefault();
+            const sidebar = document.querySelector('#sidebar');
+            sidebar.setAttribute('id', 'sidebar');
+            if (sidebar.classList.contains('close_anim')) {
+                sidebar.style.removeProperty('display');
+                sidebar.removeAttribute('animation');
+            }
+            sidebar.removeAttribute('class');
+
+        });
+        close.addEventListener('click', () => {
+            sidebar.classList.add('close_anim');
+            sidebar.setAttribute('animation', 'close_anim');
+        })
+
+        const bloomPass = new UnrealBloomPass();
+        bloomPass.exposure = 1;
+        bloomPass.strength = 0.35;
+        bloomPass.radius = 0;
+        bloomPass.threshold = 0.1;
+
+        const Graph = ForceGraph3D()
+            (elem).numDimensions(2).warmupTicks(50)
+            .backgroundColor('#101020')
+            .nodeRelSize(6)
+            .nodeAutoColorBy('name')
+            .nodeOpacity(0.95)
+            .nodeResolution(8)
+            .linkColor(() => 'rgba(255,255,255,0.2)')
+            .linkOpacity(0.8)
+            .linkWidth(2)
+            .linkDirectionalParticles(2)
+            .linkDirectionalParticleWidth(1)
+            .linkDirectionalParticleSpeed(0.003)
+            .onNodeHover(node => elem.style.cursor = node ? 'pointer' : null);
+        Graph.onNodeClick(node => {
+            if (!sidebar.classList.contains('close_anim')) {
+                sidebar.classList.add('animate__animated', 'animate__fadeInRight');
+                sidebar.style.display = "block";
+            }
+            header.innerHTML = node.name;
+            description.innerHTML = linkifyStr(node.topic, {});
+            if (node.avatar !== "") {
+                const avatar_url = node.avatar.replace('mxc://', '').split('/');
+                avatar.src = `https://matrix.nordgedanken.dev/_matrix/media/r0/download/${avatar_url[0]}/${avatar_url[1]}`;
+            } else { avatar.src = ""; }
+
+            if (node.alias !== "") {
+                link.style.setProperty('display', 'inline');
+                alias_link.innerHTML = node.alias;
+                alias_link.href = `https://matrix.to/#/${encodeURIComponent(node.alias)}`;
+            }
+        }).jsonUrl('/relations').postProcessingComposer().addPass(bloomPass);
+
+        function difference_nodes(object, base) {
+            return object.filter(node_new => !base.some(node_old => node_new.id == node_old.id));
+        }
+
+        function difference_links(object, base) {
+            return object.filter(link_new => !base.some(link_old => link_new.source == link_old.source.id && link_new.target == link_old.target.id));
+        }
+        fetch('/relations').then(res => res.json()).then(data => {
+            room_count.innerHTML = `Rooms:&nbsp;${data.nodes.length}`;
+            link_count.innerHTML = `Links:&nbsp;${data.links.length}`;
+            data = null;
+        });
+
+        /*Graph
+            .d3Force("link", d3.forceLink())
+            .d3Force("radial", d3.forceRadial(node => 300 / node.weight));*/
+
+        Graph.onNodeDrag(() => Graph.cooldownTicks(0))
+        Graph.onNodeDragEnd(() => Graph.cooldownTicks(Infinity))
+
+        Graph.warmupTicks(0)
+            .cooldownTicks(Infinity);
+        setInterval(() => {
+            fetch('/relations').then(res => res.json()).then(data => {
+                let { nodes, links } = Graph.graphData();
+                room_count.innerHTML = `Rooms:&nbsp;${data.nodes.length}`;
+                link_count.innerHTML = `Links:&nbsp;${data.links.length}`;
+                let nodes_new = difference_nodes(data.nodes, nodes);
+                let links_new = difference_links(data.links, links);
+                if (nodes_new.length !== 0 || links_new.length !== 0) {
+                    nodes.concat(nodes_new);
+                    links.concat(links_new);
+                }
+                nodes = null;
+                links = null;
+                nodes_new = null;
+                links_new = null;
+                data = null;
+            });
+        }, 5000);
+
+        // fit to canvas when engine stops
+        setTimeout(() => { Graph.zoomToFit(400); }, 5000);
+
+
+    </script>
+</body>
+
+</html>

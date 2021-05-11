@@ -8,7 +8,7 @@ use std::{
 };
 use tracing::info;
 
-type RelationsMix = Vec<((u128, String), (Vec<u128>, Vec<String>))>;
+type RelationsMix = Vec<((u128, String), Vec<u128>)>;
 
 #[derive(Debug)]
 pub struct GraphDb {
@@ -32,16 +32,24 @@ impl GraphDb {
             child_parent,
         }
     }
-    pub fn get_parent(&self, child: &str) -> Option<Cow<str>> {
+    pub fn get_parent(&self, child: &str) -> Vec<Cow<str>> {
         let child_hash = GraphDb::hash(child);
         if let Ok(Some(parent)) = self.child_parent.get(child_hash.to_le_bytes()) {
-            let hash = parent.as_ref();
-            if let Ok(Some(parent)) = self.hash_map.get(hash) {
-                let parent_id = String::from_utf8_lossy(parent.as_ref());
-                return Some(parent_id.to_string().into());
-            }
+            let parent_hashes: Vec<u128> = bincode::deserialize(parent.as_ref()).unwrap();
+            let parents: Vec<Cow<str>> = parent_hashes
+                .iter()
+                .map(|hash| {
+                    if let Ok(Some(parent)) = self.hash_map.get(hash.to_le_bytes()) {
+                        let parent_id = String::from_utf8_lossy(parent.as_ref());
+                        return Some(parent_id.to_string().into());
+                    }
+                    None
+                })
+                .flatten()
+                .collect();
+            return parents;
         }
-        None
+        vec![]
     }
 
     pub fn add_child(&self, parent: &str, child: &str) -> Result<()> {
@@ -83,6 +91,9 @@ impl GraphDb {
             })?;
         self.parent_child.flush()?;
         self.add_parent(parent_hash, child_hash)?;
+
+        // TODO send data
+        //crate::SSE_BROADCAST.0.send();
         Ok(())
     }
 
@@ -154,47 +165,27 @@ impl GraphDb {
             .get_all_parent_child()
             .filter_map(|s| s.ok())
             .map(|(key, val)| {
-                let key = fix_size(key.as_ref());
-                let decoded_val: Vec<u128> = bincode::deserialize(val.as_ref()).unwrap();
-                let key = u128::from_le_bytes(key);
+                let parent_hash = fix_size(key.as_ref());
+                let child_hashes: Vec<u128> = bincode::deserialize(val.as_ref()).unwrap();
+                let parent_hash = u128::from_le_bytes(parent_hash);
 
-                (key, decoded_val)
-            })
-            .map(|(parent_hash, child_hashes)| {
                 let parent = self.get_room_id_from_hash(&parent_hash);
-                let childs: Vec<Option<IVec>> = child_hashes
-                    .iter()
-                    .map(|child_hash| self.get_room_id_from_hash(child_hash))
-                    .collect();
-                ((parent_hash, parent), (child_hashes, childs))
-            })
-            .map(
-                |((parent_hash, parent_bytes), (child_hashes, childs_bytes))| {
-                    let mut parent = "".to_string();
-                    if let Some(parent_bytes) = parent_bytes {
-                        parent = std::str::from_utf8(parent_bytes.as_ref())
-                            .unwrap_or_default()
-                            .to_string();
-                    }
-                    let childs: Vec<String> = childs_bytes
-                        .iter()
-                        .map(|child_bytes| {
-                            let mut child = "".to_string();
-                            if let Some(child_bytes) = child_bytes {
-                                child = std::str::from_utf8(child_bytes.as_ref())
-                                    .unwrap_or_default()
-                                    .to_string();
-                            }
-                            child
-                        })
-                        .collect();
 
-                    ((parent_hash, parent), (child_hashes, childs))
-                },
-            )
+                ((parent_hash, parent), child_hashes)
+            })
+            .map(|((parent_hash, parent_bytes), child_hashes)| {
+                let mut parent = "".to_string();
+                if let Some(parent_bytes) = parent_bytes {
+                    parent = std::str::from_utf8(parent_bytes.as_ref())
+                        .unwrap_or_default()
+                        .to_string();
+                }
+
+                ((parent_hash, parent), child_hashes)
+            })
             .collect();
 
-        for ((parent_hash, parent), (child_hashes, _)) in room_id_relations {
+        for ((parent_hash, parent), child_hashes) in room_id_relations {
             let parent_hash = base64::encode(parent_hash.to_le_bytes());
 
             // TODO fix that all links work. This might be missing childs that arent parenty anywhere

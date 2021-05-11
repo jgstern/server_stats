@@ -5,9 +5,15 @@ use askama_actix::{Template, TemplateToResponse};
 use mime_guess::from_path;
 use rust_embed::RustEmbed;
 
+pub mod sse;
+
 #[derive(Template)]
 #[template(path = "index.html")]
 struct IndexTemplate;
+
+#[derive(Template)]
+#[template(path = "2d.html")]
+struct TwoDTemplate;
 
 #[derive(Template)]
 #[template(path = "vr.html")]
@@ -18,6 +24,10 @@ struct ARTemplate;
 
 pub async fn index_page() -> Result<HttpResponse> {
     IndexTemplate {}.to_response()
+}
+
+pub async fn two_d_page() -> Result<HttpResponse> {
+    TwoDTemplate {}.to_response()
 }
 
 pub async fn vr_page() -> Result<HttpResponse> {
