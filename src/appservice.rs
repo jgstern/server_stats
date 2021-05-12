@@ -352,30 +352,20 @@ impl VoyagerBot {
         if crate::CACHE_DB.graph.knows_room(room_id) {
             // Check if the parent was known for this child already
             let parents = crate::CACHE_DB.graph.get_parent(room_id);
-            if parents.iter().any(|x| x.as_ref() == parent_id) {
+            if parents.iter().any(|x| x.as_ref() != parent_id) {
                 // If it is not already known as a parent
                 info!(
                     "New room relation for already known room: {:?} -> {}",
                     parent_displayname, room_alias
                 );
-                if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id) {
+                if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id).await {
                     error!("failed to save child: {}", e);
                 }
-            } else {
-                error!("We knew {} but didnt find a parent", room_alias);
-                if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id) {
-                    error!("failed to save child: {}", e);
-                }
-
-                info!(
-                    "New room relation: {:?} -> {}",
-                    parent_displayname, room_alias
-                );
             }
             return;
         } else {
             // Save it as it is a new relation
-            if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id) {
+            if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id).await {
                 error!("failed to save child: {}", e);
             }
 

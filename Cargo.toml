@@ -36,12 +36,20 @@ xxhash-rust = {version = "0.8.2", features = ["xxh3"]}
 
 prometheus = {version="0.11.0",features=["process"]}
 
-actix-web = {version = "4.0.0-beta.6", features = ["rustls","compress"], default-features = false}
-actix-web-prom = { git = "https://github.com/arthurlm/actix-web-prom.git",rev ="a23d5a616ef915e1821889553357339c64f71096" }
 
 base64 = "0.13.0"
 chrono = "0.4"
 mime_guess = "2.0.3"
+
+actix-web = {version = "=4.0.0-beta.5", features = ["rustls","compress"], default-features = false}
+actix-web-actors = "4.0.0-beta.4"
+actix = "0.11.1"
+actix-service = "=2.0.0-beta.5"
+
+[dependencies.actix-web-prom]
+#git = "https://github.com/arthurlm/actix-web-prom.git"
+#rev ="a23d5a616ef915e1821889553357339c64f71096"
+path ="../actix-web-prom"
 [dependencies.askama]
 path = "../askama/askama"
 [dependencies.askama_actix]

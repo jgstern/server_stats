@@ -277,12 +277,21 @@
             }
         }).jsonUrl('/relations').postProcessingComposer().addPass(bloomPass);
 
-        function difference_nodes(object, base) {
-            return object.filter(node_new => !base.some(node_old => node_new.id == node_old.id));
+        function difference_nodes(old, newd) {
+            if (!old.some(node_old => node_old.id == newd.id)) {
+                return [newd];
+            } else {
+                return [];
+            }
         }
 
-        function difference_links(object, base) {
-            return object.filter(link_new => !base.some(link_old => link_new.source == link_old.source.id && link_new.target == link_old.target.id));
+        function difference_links(old, newd) {
+            if (!old.some(link_old => link_old.source.id == newd.source && newd.target == link_old.target.id)) {
+                return [newd];
+            } else {
+                return [];
+            }
+
         }
         fetch('/relations').then(res => res.json()).then(data => {
             room_count.innerHTML = `Rooms:&nbsp;${data.nodes.length}`;
@@ -299,7 +308,28 @@
 
         Graph.warmupTicks(0)
             .cooldownTicks(Infinity);
-        setInterval(() => {
+
+        let websocket = new WebSocket("wss://serverstats.nordgedanken.dev:8443/ws");
+        websocket.addEventListener("message", function (data) {
+            let { nodes, links } = Graph.graphData();
+            let nodes_new = difference_nodes(nodes, data.nodes);
+            let links_new = difference_links(links, data.links);
+            if (nodes_new.length !== 0 || links_new.length !== 0) {
+                let new_data = {
+                    nodes: [...nodes, ...nodes_new],
+                    links: [...links, ...links_new]
+                };
+                room_count.innerHTML = `Rooms:&nbsp;${new_data.nodes.length}`;
+                link_count.innerHTML = `Links:&nbsp;${new_data.links.length}`;
+                Graph.graphData(new_data);
+            }
+            nodes = null;
+            links = null;
+            nodes_new = null;
+            links_new = null;
+            data = null;
+        })
+        /*setInterval(() => {
             fetch('/relations').then(res => res.json()).then(data => {
                 let { nodes, links } = Graph.graphData();
                 room_count.innerHTML = `Rooms:&nbsp;${data.nodes.length}`;
@@ -318,7 +348,7 @@
                 links_new = null;
                 data = null;
             });
-        }, 5000);
+        }, 5000);*/
 
         // fit to canvas when engine stops
         setTimeout(() => { Graph.zoomToFit(400); }, 5000);

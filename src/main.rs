@@ -3,18 +3,14 @@
 use crate::{
     appservice::generate_appservice,
     config::Config,
-    database::cache::CacheDb,
+    database::{cache::CacheDb, graph::SSEJson},
     scraping::InfluxDb,
-    webpage::{
-        ar_page, assets, index_page,
-        sse::{new_client, Broadcaster},
-        two_d_page, vr_page,
-    },
+    webpage::{ar_page, assets, index_page, two_d_page, vr_page, ws::websocket},
 };
 use actix_web::{
     get,
     middleware::{Compress, Logger},
-    web::{self, Data},
+    web::{self},
     App, HttpResponse, HttpServer, Responder,
 };
 use actix_web_prom::PrometheusMetricsBuilder;
@@ -29,10 +25,10 @@ use matrix_sdk::{
 use once_cell::sync::{Lazy, OnceCell};
 use prometheus::{opts, register_gauge, Gauge, Registry};
 use sqlx::{postgres::PgPoolOptions, PgPool};
+use std::{collections::BTreeMap, convert::TryFrom};
 use std::{
-    collections::BTreeMap,
-    convert::TryFrom,
-    sync::{Arc, Mutex},
+    collections::HashSet,
+    sync::{Arc, RwLock},
 };
 use tokio::time::sleep;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -59,10 +55,11 @@ pub static ROOMS_TOTAL_COUNTER: Lazy<Gauge> = Lazy::new(|| {
     let opts = opts!("rooms_total", "Rooms statistics").namespace("server_stats");
     register_gauge!(opts).unwrap()
 });
-#[allow(clippy::redundant_closure)]
+
+// TODO fixme: This is a pretty memory leak
 #[allow(clippy::type_complexity)]
-pub static SSE_BROADCAST: Lazy<(Arc<Mutex<Broadcaster>>, Data<Arc<Mutex<Broadcaster>>>)> =
-    Lazy::new(|| Broadcaster::create());
+pub static WEBSOCKET: Lazy<Arc<RwLock<HashSet<SSEJson>>>> =
+    Lazy::new(|| Arc::new(RwLock::new(HashSet::new())));
 pub static MATRIX_CLIENT: OnceCell<Client> = OnceCell::new();
 pub static PG_POOL: OnceCell<PgPool> = OnceCell::new();
 pub static CACHE_DB: Lazy<CacheDb> = Lazy::new(CacheDb::new);
@@ -138,6 +135,8 @@ async fn main() -> Result<()> {
         .add_directive("server_stats=info".parse()?)
         .add_directive("sled=info".parse()?)
         //.add_directive("matrix_sdk=debug".parse()?)
+        //.add_directive("actix_server=info".parse()?)
+        //.add_directive("actix_web=info".parse()?)
         .add_directive("rustls::session=off".parse()?);
 
     tracing_subscriber::fmt()
@@ -205,11 +204,10 @@ async fn main() -> Result<()> {
     info!("Starting webserver...");
     if let Err(e) = HttpServer::new(move || {
         App::new()
-            .app_data(SSE_BROADCAST.1.clone())
             .wrap(Logger::default())
+            .service(web::resource("/ws").to(websocket))
             .wrap(prometheus.clone())
             .wrap(Compress::default())
-            .route("/events", web::get().to(new_client))
             .service(web::resource("/health").to(|| actix_web::HttpResponse::Ok().finish()))
             .service(web::resource("/").to(index_page))
             .service(web::resource("/2d").to(two_d_page))

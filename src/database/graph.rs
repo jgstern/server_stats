@@ -53,7 +53,7 @@ impl GraphDb {
         vec![]
     }
 
-    pub fn add_child(&self, parent: &str, child: &str) -> Result<()> {
+    pub async fn add_child(&self, parent: &str, child: &str) -> Result<()> {
         let parent_hash = GraphDb::hash(parent);
         let child_hash = GraphDb::hash(child);
 
@@ -94,7 +94,55 @@ impl GraphDb {
         self.add_parent(parent_hash, child_hash)?;
 
         // TODO send data
-        //crate::SSE_BROADCAST.0.send();
+        if let Some(client) = crate::MATRIX_CLIENT.get() {
+            if let Some(room) = client.get_joined_room(&RoomId::try_from(child).unwrap()) {
+                let alias = if let Some(alias) = room.canonical_alias() {
+                    alias.to_string()
+                } else {
+                    child.to_string()
+                };
+                let name = if let Ok(name) = room.display_name().await {
+                    name
+                } else {
+                    child.to_string()
+                };
+
+                let topic = if let Some(topic) = room.topic() {
+                    topic
+                } else {
+                    "".to_string()
+                };
+                let avatar_url = if let Some(avatar_url) = room.avatar_url() {
+                    avatar_url.to_string()
+                } else {
+                    "".to_string()
+                };
+                //TODO remove seeding rooms
+                if name == "MTRNord" {
+                    return Ok(());
+                }
+                let sse_json = SSEJson {
+                    node: RoomRelation {
+                        id: base64::encode(child_hash.to_le_bytes()),
+                        name,
+                        alias,
+                        avatar: avatar_url,
+                        topic,
+                        weight: Some(1),
+                    },
+                    link: Link {
+                        source: base64::encode(parent_hash.to_le_bytes()),
+                        target: base64::encode(child_hash.to_le_bytes()),
+                        value: 1,
+                    },
+                };
+
+                if let Ok(mut websocket) = crate::WEBSOCKET.write() {
+                    websocket.insert(sse_json);
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -280,14 +328,20 @@ pub struct RelationsJson {
     pub links: Vec<Link>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+pub struct SSEJson {
+    pub node: RoomRelation,
+    pub link: Link,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Link {
     pub source: String,
     pub target: String,
     pub value: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct RoomRelation {
     pub id: String,
     pub name: String,
