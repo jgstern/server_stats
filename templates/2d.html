@@ -307,8 +307,10 @@
                 let nodes_new = difference_nodes(data.nodes, nodes);
                 let links_new = difference_links(data.links, links);
                 if (nodes_new.length !== 0 || links_new.length !== 0) {
-                    nodes.concat(nodes_new);
-                    links.concat(links_new);
+                    Graph.graphData({
+                        nodes: [...nodes, ...nodes_new],
+                        links: [...links, ...links_new]
+                    });
                 }
                 nodes = null;
                 links = null;

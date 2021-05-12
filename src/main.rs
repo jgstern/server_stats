@@ -197,13 +197,13 @@ async fn main() -> Result<()> {
         };
     });
 
-    info!("Starting webserver...");
-
+    info!("Starting appservice...");
     let config = crate::CONFIG.get().expect("unable to get config");
 
     let appservice = generate_appservice(&config).await;
 
-    HttpServer::new(move || {
+    info!("Starting webserver...");
+    if let Err(e) = HttpServer::new(move || {
         App::new()
             .app_data(SSE_BROADCAST.1.clone())
             .wrap(Logger::default())
@@ -221,7 +221,10 @@ async fn main() -> Result<()> {
     })
     .bind((config.api.ip.to_string(), config.api.port))?
     .run()
-    .await?;
+    .await
+    {
+        error!("Failed to start webserver because: {}", e);
+    }
 
     if let Some(pool) = PG_POOL.get() {
         pool.close().await;

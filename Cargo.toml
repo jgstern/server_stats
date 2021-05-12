@@ -50,13 +50,15 @@ path = "../askama/askama"
 path = "../askama/askama_actix"
 
 [dependencies.matrix-sdk]
-git = "https://github.com/matrix-org/matrix-rust-sdk"
-rev = "4c09c6272bb3636e20d99177357cd31b80a2c1bf"
+#git = "https://github.com/matrix-org/matrix-rust-sdk"
+#rev = "4c09c6272bb3636e20d99177357cd31b80a2c1bf"
+path = "../matrix-rust-sdk/matrix_sdk"
 features = ["appservice"]
 
 [dependencies.matrix-sdk-appservice]
-git = "https://github.com/matrix-org/matrix-rust-sdk"
-rev = "4c09c6272bb3636e20d99177357cd31b80a2c1bf"
+#git = "https://github.com/matrix-org/matrix-rust-sdk"
+#rev = "4c09c6272bb3636e20d99177357cd31b80a2c1bf"
+path = "../matrix-rust-sdk/matrix_sdk_appservice"
 
 [dependencies.rust-embed]
 version="5.9.0"

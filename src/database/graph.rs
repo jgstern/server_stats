@@ -39,9 +39,10 @@ impl GraphDb {
             let parents: Vec<Cow<str>> = parent_hashes
                 .iter()
                 .map(|hash| {
-                    if let Ok(Some(parent)) = self.hash_map.get(hash.to_le_bytes()) {
-                        let parent_id = String::from_utf8_lossy(parent.as_ref());
-                        return Some(parent_id.to_string().into());
+                    if let Some(parent) = self.get_room_id_from_hash(hash) {
+                        let parent = parent.as_ref();
+                        let parent_id = std::str::from_utf8(parent).unwrap_or_default().to_string();
+                        return Some(parent_id.into());
                     }
                     None
                 })
@@ -98,7 +99,7 @@ impl GraphDb {
     }
 
     fn add_parent(&self, parent: u128, child: u128) -> Result<()> {
-        self.parent_child
+        self.child_parent
             .update_and_fetch(child.to_le_bytes(), |value_opt| {
                 if let Some(existing) = value_opt {
                     let mut decoded: Vec<u128> = bincode::deserialize(existing).unwrap();

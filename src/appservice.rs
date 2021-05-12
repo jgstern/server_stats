@@ -1,13 +1,19 @@
 use crate::config::Config;
 use chrono::{prelude::*, Duration as ChronoDuration};
 use matrix_sdk::{
-    api::r0::config::get_global_account_data::Request as GlobalAccountDataGetRequest,
-    api::r0::config::set_global_account_data::Request as GlobalAccountDataSetRequest,
+    api::r0::{
+        config::get_global_account_data::Request as GlobalAccountDataGetRequest,
+        filter::{FilterDefinition, LazyLoadOptions},
+    },
+    api::r0::{
+        config::set_global_account_data::Request as GlobalAccountDataSetRequest, filter::RoomFilter,
+    },
     api::r0::{
         filter::RoomEventFilter,
         message::get_message_events::{Direction, Request as MessagesRequest},
+        sync::sync_events::Filter,
     },
-    async_trait,
+    assign, async_trait,
     events::{
         direct::DirectEventContent,
         room::{
@@ -18,7 +24,7 @@ use matrix_sdk::{
     },
     identifiers::{EventId, RoomIdOrAliasId, UserId},
     room::{Joined, Room},
-    uint, Client, EventHandler, Raw,
+    uint, Client, EventHandler, Raw, SyncSettings,
 };
 use matrix_sdk_appservice::{Appservice, AppserviceRegistration};
 use once_cell::sync::Lazy;
@@ -36,6 +42,28 @@ pub async fn generate_appservice(config: &Config<'_>) -> Appservice {
         .await
         .unwrap();
 
+    let client = appservice.client();
+    tokio::spawn(async move {
+        let mut filter = FilterDefinition::default();
+        let mut room_filter = RoomFilter::default();
+        let mut event_filter = RoomEventFilter::default();
+
+        event_filter.lazy_load_options = LazyLoadOptions::Enabled {
+            include_redundant_members: false,
+        };
+        room_filter.state = event_filter;
+        filter.room = room_filter;
+        let filter_id = client.get_or_upload_filter("sync", filter).await.unwrap();
+
+        let sync_settings = SyncSettings::new().filter(Filter::FilterId(&filter_id));
+        if let Err(e) = client.sync_once(sync_settings).await {
+            error!("Sync error: {}", e);
+        }
+        info!("Finished Sync");
+    });
+    let client = appservice.client();
+    crate::MATRIX_CLIENT.set(client);
+
     let event_handler = VoyagerBot::new(appservice.clone());
 
     appservice
@@ -43,22 +71,16 @@ pub async fn generate_appservice(config: &Config<'_>) -> Appservice {
         .set_event_handler(Box::new(event_handler))
         .await;
 
-    let client = appservice
-        .client_with_localpart("server_stats")
-        .await
-        .unwrap();
-    crate::MATRIX_CLIENT.set(client);
-
     appservice
 }
 
-/*static MESSAGES_FILTER: Lazy<RoomEventFilter> = Lazy::new(|| {
+static MESSAGES_FILTER_EVENTS: Lazy<Vec<String>> = Lazy::new(|| vec!["m.room.message".into()]);
+static MESSAGES_FILTER: Lazy<RoomEventFilter> = Lazy::new(|| {
     // Make filter for what we care about
-    let mut filter = RoomEventFilter::empty();
-    let array = vec!["m.room.message".to_string()];
-    filter.types = Some(array.as_slice());
-    filter
-});*/
+    assign!(RoomEventFilter::empty(), {
+        types: Some(&MESSAGES_FILTER_EVENTS),
+    })
+});
 
 static REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"[#!][a-zA-Z0-9.\-_#=]+:[a-zA-Z0-9.\-_]+[a-zA-Z0-9]").unwrap());
@@ -191,15 +213,10 @@ impl VoyagerBot {
         // Save room to db
         VoyagerBot::save_to_db(room_alias, room_id.as_str(), parent_room).await;
 
-        // Make filter for what we care about
-        let mut filter = RoomEventFilter::empty();
-        let array = vec!["m.room.message".to_string()];
-        filter.types = Some(array.as_slice());
-
         // Prepare messages request
         let mut request = MessagesRequest::new(&room_id, "", Direction::Backward);
         request.limit = uint!(60);
-        request.filter = Some(filter.clone());
+        request.filter = Some(MESSAGES_FILTER.clone());
 
         // Run request
         match room.messages(request).await {
@@ -256,7 +273,7 @@ impl VoyagerBot {
                     while tries <= 5 && end == old_end {
                         let mut request = MessagesRequest::new(&room_id, &end, Direction::Backward);
                         request.limit = uint!(60);
-                        request.filter = Some(filter.clone());
+                        request.filter = Some(MESSAGES_FILTER.clone());
                         let previous = room.messages(request).await;
                         if let Ok(previous) = previous {
                             // Set new chunk to make sure we iterate the correct data in the next round
@@ -328,6 +345,9 @@ impl VoyagerBot {
         let parent_id = parent_room.room_id().as_str();
         let parent_displayname = parent_room.display_name().await;
 
+        if parent_id.is_empty() {
+            return;
+        }
         // Check if we know the child already
         if crate::CACHE_DB.graph.knows_room(room_id) {
             // Check if the parent was known for this child already
@@ -406,22 +426,12 @@ impl VoyagerBot {
 #[async_trait]
 impl EventHandler for VoyagerBot {
     async fn on_room_member(&self, room: Room, event: &SyncStateEvent<MemberEventContent>) {
-        if !self
-            .appservice
-            .user_id_is_in_namespace(&event.state_key)
-            .unwrap()
-            || !&event.state_key.contains("server_stats")
-        {
-            dbg!("not an appservice user");
+        if !&event.state_key.contains("server_stats") {
             return;
         }
 
         if let MembershipState::Invite = event.content.membership {
-            let client = self
-                .appservice
-                .client_with_localpart("server_stats")
-                .await
-                .unwrap();
+            let client = self.appservice.client();
 
             client.join_room_by_id(room.room_id()).await.unwrap();
             VoyagerBot::set_direct(client, room.clone(), event).await;
@@ -472,11 +482,7 @@ impl EventHandler for VoyagerBot {
             }
 
             // Handle message
-            let client = self
-                .appservice
-                .client_with_localpart("server_stats")
-                .await
-                .unwrap();
+            let client = self.appservice.client();
             tokio::spawn(async move {
                 VoyagerBot::process_message(client, &msg_body, room, Some(event_id)).await;
             });
