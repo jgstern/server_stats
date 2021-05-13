@@ -212,21 +212,13 @@ impl VoyagerBot {
 
         // Save room to db
         VoyagerBot::save_to_db(room_alias, room_id.as_str(), parent_room).await;
-        let mut request = None;
-        {
-            if let Ok(_guard) = MESSAGES_SEMPAHORE.acquire().await {
-                // Prepare messages request
-                let mut request_local = MessagesRequest::new(&room_id, "", Direction::Backward);
-                request_local.limit = uint!(60);
-                request_local.filter = Some(MESSAGES_FILTER.clone());
-                request = Some(request_local)
-            } else {
-                error!("Semaphore closed");
-            }
-        }
 
-        // Run request
-        if let Some(request) = request {
+        if let Ok(_guard) = MESSAGES_SEMPAHORE.acquire().await {
+            // Prepare messages request
+            let mut request = MessagesRequest::new(&room_id, "", Direction::Backward);
+            request.limit = uint!(60);
+            request.filter = Some(MESSAGES_FILTER.clone());
+
             match room.messages(request).await {
                 Ok(resp) => {
                     // Iterate as long as tokens arent the same
@@ -311,6 +303,8 @@ impl VoyagerBot {
                     error!("Failed to get older events: {}", e);
                 }
             }
+        } else {
+            error!("Semaphore closed");
         }
     }
 
