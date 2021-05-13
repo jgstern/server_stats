@@ -32,8 +32,9 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::{
     collections::{BTreeMap, HashMap},
     convert::TryFrom,
+    sync::Arc,
 };
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Semaphore};
 use tokio::time::sleep;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing::{error, info};
@@ -64,6 +65,7 @@ pub static WEBSOCKET_CLIENTS: Lazy<RwLock<HashMap<String, Addr<Ws>>>> =
 pub static MATRIX_CLIENT: OnceCell<Client> = OnceCell::new();
 pub static PG_POOL: OnceCell<PgPool> = OnceCell::new();
 pub static CACHE_DB: Lazy<CacheDb> = Lazy::new(CacheDb::new);
+pub static MESSAGES_SEMPAHORE: Lazy<Arc<Semaphore>> = Lazy::new(|| Arc::new(Semaphore::new(100)));
 
 pub static APP_USER_AGENT: &str = concat!("MTRNord/", env!("CARGO_PKG_NAME"),);
 

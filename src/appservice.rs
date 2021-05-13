@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::{config::Config, MESSAGES_SEMPAHORE};
 use chrono::{prelude::*, Duration as ChronoDuration};
 use matrix_sdk::{
     api::r0::{
@@ -212,87 +212,104 @@ impl VoyagerBot {
 
         // Save room to db
         VoyagerBot::save_to_db(room_alias, room_id.as_str(), parent_room).await;
-
-        // Prepare messages request
-        let mut request = MessagesRequest::new(&room_id, "", Direction::Backward);
-        request.limit = uint!(60);
-        request.filter = Some(MESSAGES_FILTER.clone());
+        let mut request = None;
+        {
+            if let Ok(_guard) = MESSAGES_SEMPAHORE.acquire().await {
+                // Prepare messages request
+                let mut request_local = MessagesRequest::new(&room_id, "", Direction::Backward);
+                request_local.limit = uint!(60);
+                request_local.filter = Some(MESSAGES_FILTER.clone());
+                request = Some(request_local)
+            } else {
+                error!("Semaphore closed");
+            }
+        }
 
         // Run request
-        match room.messages(request).await {
-            Ok(resp) => {
-                // Iterate as long as tokens arent the same
-                let mut chunk = resp.chunk;
-                let mut failed = false;
+        if let Some(request) = request {
+            match room.messages(request).await {
+                Ok(resp) => {
+                    // Iterate as long as tokens arent the same
+                    let mut chunk = resp.chunk;
+                    let mut failed = false;
 
-                let mut from = "".to_string();
-                let mut end: String = resp.end.clone().unwrap();
-                while !failed && from != end {
-                    // For each message we recursivly do this again
-                    for message in &chunk {
-                        let deserialized_message = message.deserialize();
-                        if let Ok(AnyRoomEvent::Message(AnyMessageEvent::RoomMessage(message))) =
-                            deserialized_message
-                        {
-                            // Ignore messages sent by us
-                            let sender = message.sender;
-                            if client.user_id().await.unwrap() == sender {
-                                continue;
-                            }
+                    let mut from = "".to_string();
+                    let mut end: String = resp.end.clone().unwrap();
+                    while !failed && from != end {
+                        let tickets = MESSAGES_SEMPAHORE.available_permits();
+                        info!("Available permits: {}", tickets);
+                        // For each message we recursivly do this again
+                        for message in &chunk {
+                            let deserialized_message = message.deserialize();
+                            if let Ok(AnyRoomEvent::Message(AnyMessageEvent::RoomMessage(
+                                message,
+                            ))) = deserialized_message
+                            {
+                                // Ignore messages sent by us
+                                let sender = message.sender;
+                                if client.user_id().await.unwrap() == sender {
+                                    continue;
+                                }
 
-                            let content = message.content.msgtype;
-                            if let MessageType::Text(text_content) = content {
-                                let client = client.clone();
+                                let content = message.content.msgtype;
+                                if let MessageType::Text(text_content) = content {
+                                    let client = client.clone();
 
-                                // Make sure we explicitly do not want to wait on this
-                                {
-                                    let parent_room = room.clone();
-                                    tokio::spawn(async move {
-                                        VoyagerBot::process_message(
-                                            client,
-                                            &text_content.body,
-                                            parent_room,
-                                            None,
-                                        )
-                                        .await;
-                                    });
+                                    // Make sure we explicitly do not want to wait on this
+                                    {
+                                        let parent_room = room.clone();
+                                        tokio::spawn(async move {
+                                            VoyagerBot::process_message(
+                                                client,
+                                                &text_content.body,
+                                                parent_room,
+                                                None,
+                                            )
+                                            .await;
+                                        });
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // Do next page
+                        // Do next page
 
-                    // TODO use if your synapse is bad again. We should use a queue
-                    sleep(Duration::from_secs(2)).await;
+                        // TODO use if your synapse is bad again. We should use a queue
+                        sleep(Duration::from_secs(2)).await;
 
-                    // Try getting older messages 5 times
-                    let old_end = end.clone();
+                        // Try getting older messages 5 times
+                        let old_end = end.clone();
 
-                    let tries: i32 = 0;
-                    while tries <= 5 && end == old_end {
-                        let mut request = MessagesRequest::new(&room_id, &end, Direction::Backward);
-                        request.limit = uint!(60);
-                        request.filter = Some(MESSAGES_FILTER.clone());
-                        let previous = room.messages(request).await;
-                        if let Ok(previous) = previous {
-                            // Set new chunk to make sure we iterate the correct data in the next round
-                            chunk = previous.chunk;
-                            from = end;
-                            end = previous.end.clone().unwrap();
+                        let tries: i32 = 0;
+                        while tries <= 5 && end == old_end {
+                            if let Ok(_guard) = MESSAGES_SEMPAHORE.acquire().await {
+                                let mut request =
+                                    MessagesRequest::new(&room_id, &end, Direction::Backward);
+                                request.limit = uint!(60);
+                                request.filter = Some(MESSAGES_FILTER.clone());
+                                let previous = room.messages(request).await;
+                                if let Ok(previous) = previous {
+                                    // Set new chunk to make sure we iterate the correct data in the next round
+                                    chunk = previous.chunk;
+                                    from = end;
+                                    end = previous.end.clone().unwrap();
+                                }
+                            } else {
+                                error!("Semaphore closed");
+                            }
+                        }
+                        if end == old_end {
+                            failed = true;
                         }
                     }
-                    if end == old_end {
-                        failed = true;
+                    if let Err(e) = VoyagerBot::cleanup(room_id.to_string()).await {
+                        error!("failed to clean: {}", e);
                     }
                 }
-                if let Err(e) = VoyagerBot::cleanup(room_id.to_string()).await {
-                    error!("failed to clean: {}", e);
+                Err(e) => {
+                    // TODO remove room if `Http(FromHttpResponse(Http(Known(Error { kind: Forbidden, message: "Host not in room.", status_code: 403 }))))` is returned
+                    error!("Failed to get older events: {}", e);
                 }
-            }
-            Err(e) => {
-                // TODO remove room if `Http(FromHttpResponse(Http(Known(Error { kind: Forbidden, message: "Host not in room.", status_code: 403 }))))` is returned
-                error!("Failed to get older events: {}", e);
             }
         }
     }
