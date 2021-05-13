@@ -6,7 +6,9 @@ use std::{
     borrow::Cow,
     convert::{TryFrom, TryInto},
 };
-use tracing::info;
+use tracing::{error, info};
+
+use crate::webpage::ws::WsMessage;
 
 type RelationsMix = Vec<((u128, String), Vec<u128>)>;
 
@@ -136,9 +138,12 @@ impl GraphDb {
                         value: 1,
                     },
                 };
+                let j = serde_json::to_string(&sse_json)?;
 
-                if let Ok(mut websocket) = crate::WEBSOCKET.write() {
-                    websocket.insert(sse_json);
+                for client in crate::WEBSOCKET_CLIENTS.read().await.values() {
+                    if let Err(e) = client.send(WsMessage { msg: j.clone() }).await {
+                        error!("Failed to send to WS: {}", e);
+                    }
                 }
             }
         }
@@ -328,20 +333,20 @@ pub struct RelationsJson {
     pub links: Vec<Link>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SSEJson {
     pub node: RoomRelation,
     pub link: Link,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Link {
     pub source: String,
     pub target: String,
     pub value: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct RoomRelation {
     pub id: String,
     pub name: String,

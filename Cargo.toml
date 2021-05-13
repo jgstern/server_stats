@@ -45,6 +45,7 @@ actix-web = {version = "=4.0.0-beta.5", features = ["rustls","compress"], defaul
 actix-web-actors = "4.0.0-beta.4"
 actix = "0.11.1"
 actix-service = "=2.0.0-beta.5"
+rand = "0.8.3"
 
 [dependencies.actix-web-prom]
 #git = "https://github.com/arthurlm/actix-web-prom.git"

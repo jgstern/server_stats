@@ -2894,6 +2894,7 @@ dependencies = [
  "multimap",
  "once_cell",
  "prometheus",
+ "rand",
  "regex",
  "reqwest",
  "rust-embed",

@@ -310,10 +310,11 @@
             .cooldownTicks(Infinity);
 
         let websocket = new WebSocket("wss://serverstats.nordgedanken.dev:8443/ws");
-        websocket.addEventListener("message", function (data) {
+        websocket.addEventListener("message", function (event) {
+            var data = JSON.parse(event.data);
             let { nodes, links } = Graph.graphData();
-            let nodes_new = difference_nodes(nodes, data.nodes);
-            let links_new = difference_links(links, data.links);
+            let nodes_new = difference_nodes(nodes, data.node);
+            let links_new = difference_links(links, data.link);
             if (nodes_new.length !== 0 || links_new.length !== 0) {
                 let new_data = {
                     nodes: [...nodes, ...nodes_new],
