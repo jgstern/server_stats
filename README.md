@@ -25,7 +25,7 @@
 [![Stargazers][stars-shield]][stars-url]
 [![Issues][issues-shield]][issues-url]
 [![AGPLv3 License][license-shield]][license-url]
-![Matrix](https://img.shields.io/matrix/server_stats:nordgedanken.dev.svg?label=%23server_stats%3Anordgedanken.dev&style=for-the-badge)
+[![Matrix](https://img.shields.io/matrix/server_stats:nordgedanken.dev.svg?label=%23server_stats%3Anordgedanken.dev&style=for-the-badge)](https://matrix.to/#/#server_stats:nordgedanken.dev)
 
 
 <!-- PROJECT LOGO -->
