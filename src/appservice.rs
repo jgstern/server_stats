@@ -211,7 +211,9 @@ impl VoyagerBot {
         let room_id = room.room_id();
 
         // Save room to db
-        VoyagerBot::save_to_db(room_alias, room_id.as_str(), parent_room).await;
+        if VoyagerBot::save_to_db(room_alias, room_id.as_str(), parent_room).await {
+            return;
+        }
 
         let mut resp = None;
         if let Ok(_guard) = MESSAGES_SEMPAHORE.acquire().await {
@@ -352,19 +354,20 @@ impl VoyagerBot {
         None
     }
 
-    async fn save_to_db(room_alias: String, room_id: &str, parent_room: Joined) {
+    /// Returns true if we want to exit early
+    async fn save_to_db(room_alias: String, room_id: &str, parent_room: Joined) -> bool {
         // Get parent Data
         let parent_id = parent_room.room_id().as_str();
         let parent_displayname = parent_room.display_name().await;
 
         if parent_id.is_empty() {
-            return;
+            return true;
         }
         // Check if we know the child already
         if crate::CACHE_DB.graph.knows_room(room_id) {
             // Check if the parent was known for this child already
             let parents = crate::CACHE_DB.graph.get_parent(room_id);
-            if parents.iter().any(|x| x.as_ref() != parent_id) {
+            if parents.iter().any(|x| x.as_ref() == parent_id) {
                 // If it is not already known as a parent
                 info!(
                     "New room relation for already known room: {:?} -> {}",
@@ -374,7 +377,7 @@ impl VoyagerBot {
                     error!("failed to save child: {}", e);
                 }
             }
-            return;
+            return true;
         } else {
             // Save it as it is a new relation
             if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id).await {
@@ -386,6 +389,7 @@ impl VoyagerBot {
                 parent_displayname, room_alias
             );
         }
+        false
     }
 
     /// Calls the purge_history API at synapse to cleanup rooms
