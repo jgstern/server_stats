@@ -120,7 +120,9 @@ impl GraphDb {
                     "".to_string()
                 };
                 //TODO remove seeding rooms
-                if name == "MTRNord" {
+                if name == "MTRNord"
+                    || base64::encode(parent_hash.to_le_bytes()) == "4u98GV1CGlCn6PvxBerjrw=="
+                {
                     return Ok(());
                 }
                 let sse_json = SSEJson {
@@ -270,7 +272,7 @@ impl GraphDb {
                         "".to_string()
                     };
                     //TODO remove seeding rooms
-                    if name == "MTRNord" {
+                    if name == "MTRNord" || parent_hash == "4u98GV1CGlCn6PvxBerjrw==" {
                         continue;
                     }
                     let mut links: Vec<Link> = child_hashes
