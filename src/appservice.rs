@@ -113,7 +113,6 @@ impl VoyagerBot {
                         let deserialized_message = raw.deserialize();
                         match deserialized_message {
                             Ok(mut contents) => {
-                                info!("deserialized");
                                 if contents.contains_key(sender) {
                                     let mut cloned_contents = contents.clone();
                                     let raw_content = cloned_contents.get_mut(sender);
