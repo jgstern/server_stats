@@ -1,0 +1,91 @@
+/* You can add global styles to this file, and also import other style files */
+.datatable-footer {
+    overflow: hidden !important;
+}
+
+datatable-footer {
+    overflow: hidden !important;
+}
+.ngx-datatable.material {
+    box-shadow: 1px 1px 8px 1px rgba(0, 0, 0, 0.12) !important;
+    border-radius: 5px !important;
+}
+
+.layout {
+    min-height: 100vh !important;
+}
+
+html,
+body,
+app-root,
+app-link-finder,
+app-room-list {
+    height: 100vh;
+}
+app-root,
+app-link-finder,
+app-room-list {
+    display: block;
+}
+
+.logo {
+    width: 31px;
+    height: 31px;
+    background: url(/assets/graph.png);
+    background-size: 32px 32px;
+    margin: 16px 24px 16px 0;
+    float: left;
+}
+
+nz-header {
+    position: fixed;
+    width: 100%;
+    z-index: 10000;
+}
+
+[nz-menu] {
+    line-height: 64px;
+}
+
+nz-content:not(.in-graph) {
+    padding: 0 50px;
+    margin-top: 64px;
+}
+
+nz-breadcrumb {
+    margin: 16px 0;
+}
+
+.inner-content {
+    background: #fff;
+    padding: 24px;
+    min-height: 380px;
+    box-shadow: 1px 1px 8px 1px rgba(0, 0, 0, 0.05) !important;
+    border-radius: 5px;
+}
+
+nz-footer {
+    text-align: center;
+}
+
+.scene-tooltip {
+    color: white !important;
+    background-color: #3b3b3d !important;
+    font-size: 1.1rem !important;
+    padding: 8px;
+    border-radius: 5px;
+}
+
+.scene-tooltip:empty {
+    visibility: hidden;
+}
+
+.scene-nav-info {
+    color: white !important;
+    font-size: 0.7rem !important;
+}
+
+@import "~@swimlane/ngx-datatable/index.css";
+@import "~@swimlane/ngx-datatable/themes/material.scss";
+@import "~@swimlane/ngx-datatable/assets/icons.css";
+@import "~ng-zorro-antd/ng-zorro-antd.css";

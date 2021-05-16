@@ -1,0 +1,43 @@
+<nz-layout class="layout">
+    <nz-header>
+        <div class="logo"></div>
+        <ul nz-menu nzTheme="dark" nzMode="horizontal">
+            <a nz-menu-item nzSelected routerLink="/" routerLinkActive="active">
+                <li>Home</li>
+            </a>
+            <a nz-menu-item routerLink="/links">
+                <li>Link Finder</li>
+            </a>
+            <a nz-menu-item routerLink="/3d">
+                <li>3D Graph</li>
+            </a>
+            <li nz-menu-item>AR Graph</li>
+            <li nz-menu-item>VR Graph</li>
+            <li nz-menu-item>FAQ</li>
+            <li nz-menu-item>Github</li>
+        </ul>
+    </nz-header>
+    <nz-content>
+        <nz-breadcrumb>
+            <nz-breadcrumb-item>Home</nz-breadcrumb-item>
+            <nz-breadcrumb-item>Room List</nz-breadcrumb-item>
+        </nz-breadcrumb>
+        <div class="inner-content">
+            <h1 nz-typography>Room List</h1>
+            <nz-input-group nzCompact>
+                <nz-select [ngModel]="'name'" (ngModelChange)="updateSelection($event)">
+                    <nz-option [nzLabel]="'Roomname'" [nzValue]="'name'"></nz-option>
+                    <nz-option [nzLabel]="'Alias'" [nzValue]="'alias'"></nz-option>
+                    <nz-option [nzLabel]="'Topic'" [nzValue]="'topic'"></nz-option>
+                </nz-select>
+                <input type="text" nz-input placeholder="Type to filter the name column..."
+                    (keyup)="updateFilter($event)" style="width:90%;" />
+            </nz-input-group>
+            <br /><br />
+            <ngx-datatable #table class="material" [rows]="rows" [columns]="columns" [headerHeight]="40"
+                [summaryRow]="false" [footerHeight]="40" [limit]="10" rowHeight="auto" [columnMode]="ColumnMode.force">
+            </ngx-datatable>
+        </div>
+    </nz-content>
+    <nz-footer>TODO</nz-footer>
+</nz-layout>

@@ -1,0 +1,149 @@
+#graph {
+    overflow: hidden;
+}
+
+#info {
+    font-family: "Roboto", sans-serif;
+    font-weight: 400;
+    background-color: #3b3b3d;
+    color: white;
+    position: fixed;
+    top: 5.5rem;
+    right: 1.5rem;
+    border-radius: 5px;
+    text-align: center;
+    display: flex;
+    padding: 0.5rem;
+    flex-wrap: wrap;
+    flex-direction: column;
+}
+
+#link_count {
+    margin: 0;
+}
+
+#room_count {
+    margin: 0;
+    margin-bottom: 0.1rem;
+}
+
+#sidebar {
+    --animate-duration: 0.8s;
+    font-family: "Roboto", sans-serif;
+    font-weight: 400;
+    color: white;
+    background-color: #3b3b3d;
+    width: 24.063rem;
+    height: 37.313rem;
+    display: none;
+
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    border-radius: 10px;
+    align-content: flex-start;
+}
+
+@keyframes hide {
+    0% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+#sidebar a:link {
+    color: #4157c9;
+}
+
+#sidebar a:visited {
+    color: #4157c9;
+}
+
+#sidebar a:hover {
+    color: #4157c9;
+}
+
+#sidebar a:active {
+    color: #4157c9;
+}
+
+.wrapper {
+    width: 100%;
+    height: 100%;
+
+    margin: 0;
+    background-color: #101020 !important;
+}
+
+#close {
+    font-weight: 100;
+    font-size: 3rem;
+    position: absolute;
+    right: 1rem;
+    top: -0.438rem;
+    display: inline;
+    cursor: pointer;
+}
+
+.close_anim {
+    animation: hide 0.8s ease-in-out;
+}
+
+#header {
+    font-weight: 700;
+    font-size: 1.5rem;
+    display: inline;
+}
+
+#top {
+    display: flex;
+    align-items: center;
+    justify-content: left;
+}
+
+#avatar {
+    position: relative;
+    margin-left: 1rem;
+    margin-right: 1rem;
+    display: inline;
+    border-radius: 50px;
+    width: 48px;
+    height: 48px;
+}
+
+#content {
+    position: absolute;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    padding-bottom: 1rem;
+    z-index: -9999999;
+    display: block;
+    width: 90%;
+    overflow: auto;
+    height: 100%;
+    height: 34.813rem;
+    margin-top: 2.438rem;
+}
+
+#description {
+    position: relative;
+}
+
+#divider {
+    border: 1px solid #e3e3e3;
+}
+
+#link {
+    position: relative;
+    font-size: 0.875rem;
+    font-weight: 500;
+    display: none;
+}
+
+.break {
+    flex-basis: 100%;
+    height: 0;
+}

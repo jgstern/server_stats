@@ -347,28 +347,6 @@
             links_new = null;
             data = null;
         })
-        /*setInterval(() => {
-            fetch('/relations').then(res => res.json()).then(data => {
-                let { nodes, links } = Graph.graphData();
-                room_count.innerHTML = `Rooms:&nbsp;${data.nodes.length}`;
-                link_count.innerHTML = `Links:&nbsp;${data.links.length}`;
-                let nodes_new = difference_nodes(data.nodes, nodes);
-                let links_new = difference_links(data.links, links);
-                if (nodes_new.length !== 0 || links_new.length !== 0) {
-                    Graph.graphData({
-                        nodes: [...nodes, ...nodes_new],
-                        links: [...links, ...links_new]
-                    });
-                }
-                nodes = null;
-                links = null;
-                nodes_new = null;
-                links_new = null;
-                data = null;
-            });
-        }, 5000);*/
-
-        // fit to canvas when engine stops
         setTimeout(() => { Graph.zoomToFit(400); }, 5000);
 
 

@@ -1,0 +1,42 @@
+<nz-layout class="layout">
+    <nz-header>
+        <div class="logo"></div>
+        <ul nz-menu nzTheme="dark" nzMode="horizontal">
+            <a nz-menu-item routerLink="/">
+                <li>Home</li>
+            </a>
+            <a nz-menu-item routerLink="/links" nzSelected routerLinkActive="active">
+                <li>Link Finder</li>
+            </a>
+            <a routerLink="/3d" nz-menu-item>
+                <li>3D Graph</li>
+            </a>
+            <li nz-menu-item>AR Graph</li>
+            <li nz-menu-item>VR Graph</li>
+            <li nz-menu-item>FAQ</li>
+            <li nz-menu-item>Github</li>
+        </ul>
+    </nz-header>
+    <nz-content>
+        <nz-breadcrumb>
+            <nz-breadcrumb-item>Home</nz-breadcrumb-item>
+            <nz-breadcrumb-item>Link Finder</nz-breadcrumb-item>
+        </nz-breadcrumb>
+        <div class="inner-content">
+            <h1 nz-typography>Link Finder</h1>
+            <nz-input-group nzCompact>
+                <nz-select [ngModel]="'outgoing'" (ngModelChange)="updateSelection($event)">
+                    <nz-option [nzLabel]="'Outgoing'" [nzValue]="'outgoing'"></nz-option>
+                    <nz-option [nzLabel]="'Incoming'" [nzValue]="'incoming'"></nz-option>
+                </nz-select>
+                <input type="text" nz-input placeholder="Type to filter the name column..."
+                    (keyup)="updateFilter($event)" style="width:90%;" />
+            </nz-input-group>
+            <br /><br />
+            <ngx-datatable #table class="material" [rows]="rows" [columns]="columns" [headerHeight]="40"
+                [summaryRow]="false" [footerHeight]="40" [limit]="10" rowHeight="auto" [columnMode]="ColumnMode.force">
+            </ngx-datatable>
+        </div>
+    </nz-content>
+    <nz-footer>TODO</nz-footer>
+</nz-layout>

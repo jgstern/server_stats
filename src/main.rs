@@ -6,7 +6,7 @@ use crate::{
     database::cache::CacheDb,
     scraping::InfluxDb,
     webpage::{
-        ar_page, assets, index_page, two_d_page, vr_page,
+        ar_page, assets, index_page, two_d_page, vr_page, webpage,
         ws::{websocket, Ws},
     },
 };
@@ -219,6 +219,7 @@ async fn main() -> Result<()> {
             .route("/assets/{filename:.*}", web::get().to(assets))
             .service(relations)
             .service(appservice.actix_service())
+            .route("/{filename:.*}", web::get().to(webpage))
     })
     .bind((config.api.ip.to_string(), config.api.port))?
     .run()

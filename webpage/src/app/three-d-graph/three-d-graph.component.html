@@ -1,0 +1,43 @@
+<nz-layout class="layout">
+    <nz-header>
+        <div class="logo"></div>
+        <ul nz-menu nzTheme="dark" nzMode="horizontal">
+            <a nz-menu-item routerLink="/">
+                <li>Home</li>
+            </a>
+            <a nz-menu-item routerLink="/links">
+                <li>Link Finder</li>
+            </a>
+            <a nz-menu-item nzSelected routerLink="/3d" routerLinkActive="active">
+                <li>3D Graph</li>
+            </a>
+            <li nz-menu-item>AR Graph</li>
+            <li nz-menu-item>VR Graph</li>
+            <li nz-menu-item>FAQ</li>
+            <li nz-menu-item>Github</li>
+        </ul>
+    </nz-header>
+    <nz-content class="in-graph">
+        <div class="wrapper">
+            <div id="graph" #graph></div>
+            <div id="info">
+                <p id="room_count">Rooms: {{data?.nodes?.length}}</p>
+                <div class="break"></div>
+                <p id="link_count">Links: {{data?.links?.length}}</p>
+            </div>
+            <div id="sidebar" #sidebar>
+                <div id="close" #close>×</div>
+                <div id="content">
+                    <div id="top">
+                        <p id="header">{{sidebar_header}}</p>
+                        <img id="avatar" src="{{avatar}}" />
+                    </div>
+                    <hr id="divider" />
+                    <p id="description" [innerHTML]="sidebar_description"></p>
+                    <p id="link" #link>Join room:&nbsp;<a rel="noreferrer" id="alias_link" target='_blank'
+                            href="{{alias_link_href}}">{{alias_link}}</a></p>
+                </div>
+            </div>
+        </div>
+    </nz-content>
+</nz-layout>
