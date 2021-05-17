@@ -40,9 +40,6 @@ impl Ws {
                 // heartbeat timed out
                 info!("Websocket Client heartbeat failed, disconnecting!");
 
-                // stop actor
-                ctx.stop();
-
                 let id = act.id.clone();
                 let remove_client = async move {
                     // remove from clients
@@ -51,6 +48,9 @@ impl Ws {
 
                 let remove_client = actix::fut::wrap_future::<_, Self>(remove_client);
                 ctx.wait(remove_client);
+
+                // stop actor
+                ctx.stop();
 
                 // don't try to send a ping
                 return;
