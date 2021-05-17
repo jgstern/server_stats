@@ -13,7 +13,7 @@ export class LinkFinderComponent implements OnInit {
   rows: any[] = [];
   temp: any[] = [];
   filterColumn = 'name';
-  columns = [{ prop: 'name', name: 'Roomname' }, { name: 'Alias' }, { name: 'Topic' }, { prop: 'weight', name: 'Links' }];
+  columns = [{ prop: 'name', name: 'Roomname' }, { name: 'Alias' }, { prop: 'room_id', name: 'Room ID' }, { name: 'Topic' }, { prop: 'incoming_links', name: 'Incoming Links' }, { prop: 'outgoing_links', name: 'Outgoing Links' }];
   ColumnMode = ColumnMode;
 
   constructor() { }

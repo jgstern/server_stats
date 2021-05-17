@@ -6,7 +6,7 @@ use std::{
     borrow::Cow,
     convert::{TryFrom, TryInto},
 };
-use tracing::{error, info};
+use tracing::error;
 
 use crate::webpage::ws::WsMessage;
 
@@ -133,6 +133,9 @@ impl GraphDb {
                         avatar: avatar_url,
                         topic,
                         weight: Some(1),
+                        incoming_links: None,
+                        outgoing_links: None,
+                        room_id: child.to_string(),
                     },
                     link: Link {
                         source: base64::encode(parent_hash.to_le_bytes()),
@@ -245,55 +248,56 @@ impl GraphDb {
             let parent_hash = base64::encode(parent_hash.to_le_bytes());
 
             // TODO fix that all links work. This might be missing childs that arent parenty anywhere
+            if let Some(relation) = self
+                .generate_room_relation(parent_hash.clone(), &parent)
+                .await
+            {
+                let mut links: Vec<Link> = child_hashes
+                    .iter()
+                    .map(|child_hash| base64::encode(child_hash.to_le_bytes()))
+                    .map(|child| Link {
+                        source: parent_hash.clone(),
+                        target: child,
+                        value: 1,
+                    })
+                    .collect();
 
-            if let Some(client) = crate::MATRIX_CLIENT.get() {
-                if let Some(room) =
-                    client.get_joined_room(&RoomId::try_from(parent.clone()).unwrap())
-                {
-                    let alias = if let Some(alias) = room.canonical_alias() {
-                        alias.to_string()
-                    } else {
-                        parent.clone()
-                    };
-                    let name = if let Ok(name) = room.display_name().await {
-                        name
-                    } else {
-                        parent
-                    };
+                if relation.name == "MTRNord" || parent_hash == "4u98GV1CGlCn6PvxBerjrw==" {
+                    continue;
+                }
+                all_links.append(&mut links);
 
-                    let topic = if let Some(topic) = room.topic() {
-                        topic.to_string()
-                    } else {
-                        "".to_string()
-                    };
-                    let avatar_url = if let Some(avatar_url) = room.avatar_url() {
-                        avatar_url.to_string()
-                    } else {
-                        "".to_string()
-                    };
-                    //TODO remove seeding rooms
-                    if name == "MTRNord" || parent_hash == "4u98GV1CGlCn6PvxBerjrw==" {
-                        continue;
+                // Add the parent
+                nodes.push(relation);
+            }
+        }
+
+        let missing_child_nodes_links: Vec<&Link> = all_links
+            .iter()
+            .filter(|link| {
+                !nodes
+                    .iter()
+                    .any(|relation: &RoomRelation| relation.id == link.target)
+            })
+            .collect();
+
+        // Add missing childs
+        for link in &missing_child_nodes_links {
+            if let Ok(hash) = base64::decode(link.target.clone()) {
+                let room_hash_bytes = fix_size(hash.as_ref());
+                let room_hash = u128::from_le_bytes(room_hash_bytes);
+                let room_id_bytes = self.get_room_id_from_hash(&room_hash);
+                if let Some(room_id_bytes) = room_id_bytes {
+                    let room_id = std::str::from_utf8(room_id_bytes.as_ref()).unwrap_or_default();
+                    if let Some(relation) = self
+                        .generate_room_relation(link.target.clone(), room_id)
+                        .await
+                    {
+                        if relation.name == "MTRNord" || link.target == "4u98GV1CGlCn6PvxBerjrw==" {
+                            continue;
+                        }
+                        nodes.push(relation);
                     }
-                    let mut links: Vec<Link> = child_hashes
-                        .iter()
-                        .map(|child_hash| base64::encode(child_hash.to_le_bytes()))
-                        .filter(|reference| *reference != parent_hash)
-                        .map(|child| Link {
-                            source: parent_hash.clone(),
-                            target: child,
-                            value: 1,
-                        })
-                        .collect();
-                    all_links.append(&mut links);
-                    nodes.push(RoomRelation {
-                        id: parent_hash,
-                        name: name.to_string(),
-                        alias,
-                        avatar: avatar_url,
-                        topic,
-                        weight: None,
-                    });
                 }
             }
         }
@@ -316,16 +320,63 @@ impl GraphDb {
         for mut node in &mut nodes {
             let links = all_links
                 .iter()
-                .filter(|x| x.source == node.id || x.target == node.id)
+                .filter(|x| (x.source == node.id || x.target == node.id) && x.source != x.target)
                 .count();
+            let incoming_links = all_links.iter().filter(|x| x.source == node.id).count();
+            let outgoing_links = all_links.iter().filter(|x| x.target == node.id).count();
             node.weight = Some(links);
+            node.incoming_links = Some(incoming_links);
+            node.outgoing_links = Some(outgoing_links);
         }
 
-        info!("room_id_relations length: {}", nodes.len());
         RelationsJson {
             nodes,
             links: all_links,
         }
+    }
+
+    async fn generate_room_relation(
+        &self,
+        room_hash: String,
+        room_id: &str,
+    ) -> Option<RoomRelation> {
+        if let Some(client) = crate::MATRIX_CLIENT.get() {
+            if let Some(room) = client.get_joined_room(&RoomId::try_from(room_id).unwrap()) {
+                let alias = if let Some(alias) = room.canonical_alias() {
+                    alias.to_string()
+                } else {
+                    room_id.to_string()
+                };
+                let name = if let Ok(name) = room.display_name().await {
+                    name
+                } else {
+                    room_id.to_string()
+                };
+
+                let topic = if let Some(topic) = room.topic() {
+                    topic
+                } else {
+                    "".to_string()
+                };
+                let avatar_url = if let Some(avatar_url) = room.avatar_url() {
+                    avatar_url.to_string()
+                } else {
+                    "".to_string()
+                };
+                return Some(RoomRelation {
+                    id: room_hash,
+                    name,
+                    alias,
+                    avatar: avatar_url,
+                    topic,
+                    weight: None,
+                    incoming_links: None,
+                    outgoing_links: None,
+                    room_id: room_id.to_string(),
+                });
+            }
+        }
+        None
     }
 }
 
@@ -351,9 +402,12 @@ pub struct Link {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RoomRelation {
     pub id: String,
+    pub room_id: String,
     pub name: String,
     pub alias: String,
     pub avatar: String,
     pub topic: String,
     pub weight: Option<usize>,
+    pub incoming_links: Option<usize>,
+    pub outgoing_links: Option<usize>,
 }

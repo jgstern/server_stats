@@ -232,7 +232,7 @@ impl VoyagerBot {
 
                 let mut from = "".to_string();
                 let mut end: String = resp.end.clone().unwrap();
-                while !failed && from != end {
+                while !chunk.is_empty() && !failed && from != end {
                     let tickets = MESSAGES_SEMPAHORE.available_permits();
                     info!("Available permits: {}", tickets);
                     // For each message we recursivly do this again
@@ -366,7 +366,7 @@ impl VoyagerBot {
         if crate::CACHE_DB.graph.knows_room(room_id) {
             // Check if the parent was known for this child already
             let parents = crate::CACHE_DB.graph.get_parent(room_id);
-            if parents.iter().any(|x| x.as_ref() == parent_id) {
+            if !parents.iter().any(|x| x.as_ref() == parent_id) {
                 // If it is not already known as a parent
                 info!(
                     "New room relation for already known room: {:?} -> {}",

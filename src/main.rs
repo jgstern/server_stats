@@ -213,6 +213,8 @@ async fn main() -> Result<()> {
             .wrap(Compress::default())
             .service(web::resource("/health").to(|| actix_web::HttpResponse::Ok().finish()))
             .service(web::resource("/").to(index_page))
+            .service(web::resource("/3d").to(index_page))
+            .service(web::resource("/links").to(index_page))
             .service(web::resource("/2d").to(two_d_page))
             .service(web::resource("/vr").to(vr_page))
             .service(web::resource("/ar").to(ar_page))

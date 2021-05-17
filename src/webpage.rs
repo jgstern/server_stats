@@ -79,6 +79,8 @@ pub async fn assets(req: HttpRequest) -> HttpResponse {
 
 pub async fn webpage(req: HttpRequest) -> HttpResponse {
     let path: &str = req.match_info().query("filename");
-    println!("PATH: {}", path);
+    if path == "metrics" {
+        return HttpResponse::Ok().finish();
+    }
     handle_embedded_file(path)
 }
