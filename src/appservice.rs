@@ -1,17 +1,11 @@
 use crate::{config::Config, MESSAGES_SEMPAHORE};
 use chrono::{prelude::*, Duration as ChronoDuration};
 use matrix_sdk::{
-    api::r0::{
-        config::get_global_account_data::Request as GlobalAccountDataGetRequest,
-        filter::{FilterDefinition, LazyLoadOptions},
-    },
-    api::r0::{
-        config::set_global_account_data::Request as GlobalAccountDataSetRequest, filter::RoomFilter,
-    },
+    api::r0::config::get_global_account_data::Request as GlobalAccountDataGetRequest,
+    api::r0::config::set_global_account_data::Request as GlobalAccountDataSetRequest,
     api::r0::{
         filter::RoomEventFilter,
         message::get_message_events::{Direction, Request as MessagesRequest},
-        sync::sync_events::Filter,
     },
     assign, async_trait,
     events::{
@@ -24,7 +18,7 @@ use matrix_sdk::{
     },
     identifiers::{EventId, RoomIdOrAliasId, UserId},
     room::{Joined, Room},
-    uint, Client, EventHandler, Raw, SyncSettings,
+    uint, Client, EventHandler, Raw,
 };
 use matrix_sdk_appservice::{Appservice, AppserviceRegistration};
 use once_cell::sync::Lazy;
@@ -42,34 +36,13 @@ pub async fn generate_appservice(config: &Config<'_>) -> Appservice {
         .await
         .unwrap();
 
-    let client = appservice.client();
-    tokio::spawn(async move {
-        let mut filter = FilterDefinition::default();
-        let mut room_filter = RoomFilter::default();
-        let mut event_filter = RoomEventFilter::default();
-
-        event_filter.lazy_load_options = LazyLoadOptions::Enabled {
-            include_redundant_members: false,
-        };
-        room_filter.state = event_filter;
-        filter.room = room_filter;
-        let filter_id = client.get_or_upload_filter("sync", filter).await.unwrap();
-
-        let sync_settings = SyncSettings::new().filter(Filter::FilterId(&filter_id));
-        if let Err(e) = client.sync_once(sync_settings).await {
-            error!("Sync error: {}", e);
-        }
-        info!("Finished Sync");
-    });
-    let client = appservice.client();
+    let client = appservice.client(None).await;
     crate::MATRIX_CLIENT.set(client);
 
     let event_handler = VoyagerBot::new(appservice.clone());
 
-    appservice
-        .client()
-        .set_event_handler(Box::new(event_handler))
-        .await;
+    let client = appservice.client(None).await;
+    client.set_event_handler(Box::new(event_handler)).await;
 
     appservice
 }
@@ -119,7 +92,7 @@ impl VoyagerBot {
                                     if let Some(content) = raw_content {
                                         content.push(room.room_id().clone());
                                         contents.insert(sender.clone(), content.clone());
-                                    }
+                                    };
                                 }
 
                                 let rawed_contents: Raw<DirectEventContent> = contents.into();
@@ -131,7 +104,7 @@ impl VoyagerBot {
                                 );
                                 if let Err(e) = client.send(set_request, None).await {
                                     error!("Failed to set m.direct: {}", e);
-                                }
+                                };
                             }
                             Err(e) => {
                                 error!("unable to deserialize: {}", e);
@@ -155,11 +128,11 @@ impl VoyagerBot {
                         );
                         if let Err(e) = client.send(set_request, None).await {
                             error!("Failed to set m.direct: {}", e);
-                        }
+                        };
                     }
                 }
             }
-        }
+        };
     }
 
     #[async_recursion::async_recursion]
@@ -178,8 +151,8 @@ impl VoyagerBot {
         if let Some(event_id) = event_id {
             if let Err(e) = room.read_marker(&event_id, Some(&event_id)).await {
                 error!("Can't send read marker event: {}", e);
-            }
-        }
+            };
+        };
 
         // Iterate over aliases
         for cap in REGEX.captures_iter(&msg_body) {
@@ -192,6 +165,11 @@ impl VoyagerBot {
     }
 
     async fn search_new_room(client: Client, room_alias: String, parent_room: Joined) {
+        // Workaround for: https://github.com/matrix-org/synapse/issues/10021
+        if room_alias == "#emacs:matrix.org" {
+            return;
+        }
+
         // Try to join and give it max 5 tries to do so.
         let mut tries: i32 = 0;
         let mut room = None;
@@ -223,7 +201,7 @@ impl VoyagerBot {
             resp = Some(room.messages(request).await);
         } else {
             error!("Semaphore closed");
-        }
+        };
         match resp {
             Some(Ok(resp)) => {
                 // Iterate as long as tokens arent the same
@@ -264,8 +242,8 @@ impl VoyagerBot {
                                         .await;
                                     });
                                 }
-                            }
-                        }
+                            };
+                        };
                     }
 
                     // Do next page
@@ -289,10 +267,10 @@ impl VoyagerBot {
                                 chunk = previous.chunk;
                                 from = end;
                                 end = previous.end.clone().unwrap();
-                            }
+                            };
                         } else {
                             error!("Semaphore closed");
-                        }
+                        };
                     }
                     if end == old_end {
                         failed = true;
@@ -300,7 +278,7 @@ impl VoyagerBot {
                 }
                 if let Err(e) = VoyagerBot::cleanup(room_id.to_string()).await {
                     error!("failed to clean: {}", e);
-                }
+                };
             }
             Some(Err(e)) => {
                 // TODO remove room if `Http(FromHttpResponse(Http(Known(Error { kind: Forbidden, message: "Host not in room.", status_code: 403 }))))` is returned
@@ -319,7 +297,7 @@ impl VoyagerBot {
                 .find(|room| {
                     if let Some(alias) = room.canonical_alias() {
                         return alias == room_alias;
-                    }
+                    };
                     *room.room_id() == room_alias
                 })
                 .cloned();
@@ -340,7 +318,7 @@ impl VoyagerBot {
                         let room = client.get_joined_room(&resp.room_id);
                         if let Some(room) = room {
                             return Some(room);
-                        }
+                        };
                     }
                     Err(e) => {
                         error!("Failed to join room ({}): {}", room_alias, e);
@@ -374,14 +352,14 @@ impl VoyagerBot {
                 );
                 if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id).await {
                     error!("failed to save child: {}", e);
-                }
+                };
             }
             return true;
         } else {
             // Save it as it is a new relation
             if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id).await {
                 error!("failed to save child: {}", e);
-            }
+            };
 
             info!(
                 "New room relation: {:?} -> {}",
@@ -436,12 +414,11 @@ impl EventHandler for VoyagerBot {
         }
 
         if let MembershipState::Invite = event.content.membership {
-            let client = self.appservice.client();
-
+            let client = self.appservice.client(None).await;
             client.join_room_by_id(room.room_id()).await.unwrap();
             VoyagerBot::set_direct(client, room.clone(), event).await;
             info!("Successfully joined room {}", room.room_id());
-        }
+        };
     }
 
     async fn on_room_message(&self, room: Room, event: &SyncMessageEvent<MessageEventContent>) {
@@ -487,10 +464,10 @@ impl EventHandler for VoyagerBot {
             }
 
             // Handle message
-            let client = self.appservice.client();
+            let client = self.appservice.client(None).await;
             tokio::spawn(async move {
                 VoyagerBot::process_message(client, &msg_body, room, Some(event_id)).await;
             });
-        }
+        };
     }
 }

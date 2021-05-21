@@ -22,6 +22,7 @@ import { LinkFinderComponent } from './link-finder/link-finder.component';
 import { RoomListComponent } from './room-list/room-list.component';
 import { LinkyModule } from 'ngx-linky';
 import { ThreeDGraphComponent } from './three-d-graph/three-d-graph.component';
+import { FaqComponent } from './faq/faq.component';
 
 registerLocaleData(en);
 
@@ -30,7 +31,8 @@ registerLocaleData(en);
     AppComponent,
     LinkFinderComponent,
     RoomListComponent,
-    ThreeDGraphComponent
+    ThreeDGraphComponent,
+    FaqComponent
   ],
   imports: [
     BrowserModule,

@@ -22,9 +22,11 @@
     "@angular/router": "~11.2.14",
     "@swimlane/ngx-datatable": "^19.0.0",
     "autolinker": "^3.14.3",
+    "fuse.js": "^6.4.6",
     "ng-zorro-antd": "^11.4.1",
     "ngx-linky": "^3.0.0",
     "rxjs": "~6.6.0",
+    "rxjs-websockets": "^8.0.1",
     "tslib": "^2.0.0",
     "zone.js": "~0.11.3"
   },

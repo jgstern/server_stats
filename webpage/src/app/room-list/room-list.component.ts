@@ -1,7 +1,8 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
 import { ColumnMode, DatatableComponent } from '@swimlane/ngx-datatable';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
 import Autolinker from 'autolinker';
+import { ApiService } from '../api.service';
+import Fuse from 'fuse.js';
 
 export interface Row {
   id: string;
@@ -31,21 +32,33 @@ export class RoomListComponent implements OnInit {
   columns = [{ prop: 'name', name: 'Roomname' }, { name: 'Alias' }, { prop: 'room_id', name: 'Room ID' }, { name: 'Topic' }, { prop: 'incoming_links', name: 'Incoming Links' }, { prop: 'outgoing_links', name: 'Outgoing Links' }];
   ColumnMode = ColumnMode;
 
-  constructor(private http: HttpClient) { }
+  constructor(public api: ApiService) { }
 
   ngOnInit(): void {
-    //TODO use public iphttp://localhost:3332
-    this.http.get<APIData>('/relations', { headers: new HttpHeaders({ 'Content-Type': 'application/json', }) }).subscribe((data: APIData) => {
-      // cache our list
-      data.nodes = data.nodes.map(data => {
-        data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
-        data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
-        return data;
-      });
-      this.temp = [...data.nodes];
+    if (this.api.data != null && this.api.data != undefined) {
+      const data = this.api.data;
       this.rows = data.nodes;
-    });
+      if (data.nodes != null && data.nodes != undefined) {
+        let nodes = data.nodes;
+        this.temp = nodes;
+        this.rows = nodes;
+      }
+
+    }
+    this.api.getDataUpdates().subscribe(data => {
+      if (data != null && data != undefined) {
+        let nodes = data.nodes;
+        nodes = nodes.map(data => {
+          data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+          data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
+          return data;
+        });
+        this.temp = nodes;
+        this.rows = nodes;
+      }
+    })
   }
+
   truncateText(text: string, length: number) {
     if (text.length <= length) {
       return text;
@@ -62,11 +75,31 @@ export class RoomListComponent implements OnInit {
     const val = event.target.value.toLowerCase();
     const filterColumn = this.filterColumn;
     // filter our data
-    const temp = this.temp.filter(function (d) {
-      const indexName = filterColumn as "id" | "name" | "alias" | "avatar" | "topic" | "weight";
-      return d[indexName].toLowerCase().indexOf(val) !== -1 || !val;
+    const indexName = filterColumn as "id" | "name" | "alias" | "avatar" | "topic" | "weight";
+    const options = {
+      includeScore: true,
+      // Search in `author` and in `tags` array
+      keys: [indexName]
+    }
+
+    const fuse = new Fuse(this.temp, options);
+
+    const result = fuse.search(val);
+    if (result.length == 0) {
+      if (this.api.data != null) {
+        this.rows = this.api.data.nodes;
+      }
+      return;
+    }
+
+    result.sort((a, b) => {
+      // Compare the 2 scores
+      if (a.score!! < b.score!!) return -1;
+      if (a.score!! > b.score!!) return 1;
+      return 0;
     });
 
+    const temp = result.map(e => e.item);
     // update the rows
     this.rows = temp;
     // Whenever the filter changes, always go back to the first page

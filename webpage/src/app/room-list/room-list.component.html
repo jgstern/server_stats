@@ -2,18 +2,18 @@
     <nz-header>
         <div class="logo"></div>
         <ul nz-menu nzTheme="dark" nzMode="horizontal">
-            <a nz-menu-item nzSelected routerLink="/" routerLinkActive="active">
-                <li>Home</li>
+            <li nz-menu-item nzSelected>
+                <a routerLink="/" routerLinkActive="active">Home</a>
+            </li>
+            <a nz-menu-item>
+                <a routerLink="/links">Link Finder</a>
             </a>
-            <a nz-menu-item routerLink="/links">
-                <li>Link Finder</li>
-            </a>
-            <a nz-menu-item routerLink="/3d">
-                <li>3D Graph</li>
-            </a>
-            <li nz-menu-item>AR Graph</li>
-            <li nz-menu-item>VR Graph</li>
-            <li nz-menu-item>FAQ</li>
+            <li nz-menu-item>
+                <a routerLink="/3d">3D Graph</a>
+            </li>
+            <li nz-menu-item>
+                <a routerLink="/faq">FAQ</a>
+            </li>
             <li nz-menu-item>Github</li>
         </ul>
     </nz-header>
@@ -34,7 +34,7 @@
                     (keyup)="updateFilter($event)" style="width:90%;" />
             </nz-input-group>
             <br /><br />
-            <ngx-datatable #table class="material" [rows]="rows" [columns]="columns" [headerHeight]="40"
+            <ngx-datatable #table class="material" [rows]="this.rows" [columns]="columns" [headerHeight]="40"
                 [summaryRow]="false" [footerHeight]="40" [limit]="10" rowHeight="auto" [columnMode]="ColumnMode.force">
             </ngx-datatable>
         </div>

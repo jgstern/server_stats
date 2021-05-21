@@ -1,16 +1,16 @@
+use crate::webpage::ws::WsMessage;
 use color_eyre::Result;
 use matrix_sdk::identifiers::RoomId;
 use serde::{Deserialize, Serialize};
 use sled::{IVec, Iter};
 use std::{
     borrow::Cow,
+    collections::BTreeSet,
     convert::{TryFrom, TryInto},
 };
 use tracing::error;
 
-use crate::webpage::ws::WsMessage;
-
-type RelationsMix = Vec<((u128, String), Vec<u128>)>;
+type RelationsMix = Vec<((u128, String), BTreeSet<u128>)>;
 
 #[derive(Debug)]
 pub struct GraphDb {
@@ -95,7 +95,6 @@ impl GraphDb {
         self.parent_child.flush()?;
         self.add_parent(parent_hash, child_hash)?;
 
-        // TODO send data
         if let Some(client) = crate::MATRIX_CLIENT.get() {
             if let Some(room) = client.get_joined_room(&RoomId::try_from(child).unwrap()) {
                 let alias = if let Some(alias) = room.canonical_alias() {
@@ -104,7 +103,11 @@ impl GraphDb {
                     child.to_string()
                 };
                 let name = if let Ok(name) = room.display_name().await {
-                    name
+                    if name.is_empty() {
+                        child.to_string()
+                    } else {
+                        name
+                    }
                 } else {
                     child.to_string()
                 };
@@ -112,14 +115,13 @@ impl GraphDb {
                 let topic = if let Some(topic) = room.topic() {
                     topic
                 } else {
-                    "".to_string()
+                    "".into()
                 };
                 let avatar_url = if let Some(avatar_url) = room.avatar_url() {
                     avatar_url.to_string()
                 } else {
-                    "".to_string()
+                    "".into()
                 };
-                //TODO remove seeding rooms
                 if name == "MTRNord"
                     || base64::encode(parent_hash.to_le_bytes()) == "4u98GV1CGlCn6PvxBerjrw=="
                 {
@@ -135,7 +137,7 @@ impl GraphDb {
                         weight: Some(1),
                         incoming_links: None,
                         outgoing_links: None,
-                        room_id: child.to_string(),
+                        room_id: child.into(),
                     },
                     link: Link {
                         source: base64::encode(parent_hash.to_le_bytes()),
@@ -213,8 +215,9 @@ impl GraphDb {
     }
 
     pub async fn get_json_relations(&self) -> RelationsJson {
-        let mut nodes = Vec::new();
-        let mut all_links = Vec::new();
+        //TODO use HashSet for performance and reuse the already existing hashes
+        let mut nodes = BTreeSet::new();
+        let mut all_links = BTreeSet::new();
 
         fn fix_size(raw: &[u8]) -> [u8; 16] {
             raw.try_into().expect("slice with incorrect length")
@@ -225,7 +228,7 @@ impl GraphDb {
             .filter_map(|s| s.ok())
             .map(|(key, val)| {
                 let parent_hash = fix_size(key.as_ref());
-                let child_hashes: Vec<u128> = bincode::deserialize(val.as_ref()).unwrap();
+                let child_hashes: BTreeSet<u128> = bincode::deserialize(val.as_ref()).unwrap();
                 let parent_hash = u128::from_le_bytes(parent_hash);
 
                 let parent = self.get_room_id_from_hash(&parent_hash);
@@ -247,12 +250,11 @@ impl GraphDb {
         for ((parent_hash, parent), child_hashes) in room_id_relations {
             let parent_hash = base64::encode(parent_hash.to_le_bytes());
 
-            // TODO fix that all links work. This might be missing childs that arent parenty anywhere
             if let Some(relation) = self
                 .generate_room_relation(parent_hash.clone(), &parent)
                 .await
             {
-                let mut links: Vec<Link> = child_hashes
+                let links: BTreeSet<Link> = child_hashes
                     .iter()
                     .map(|child_hash| base64::encode(child_hash.to_le_bytes()))
                     .map(|child| Link {
@@ -265,10 +267,10 @@ impl GraphDb {
                 if relation.name == "MTRNord" || parent_hash == "4u98GV1CGlCn6PvxBerjrw==" {
                     continue;
                 }
-                all_links.append(&mut links);
+                all_links.extend(links.into_iter());
 
                 // Add the parent
-                nodes.push(relation);
+                nodes.insert(relation);
             }
         }
 
@@ -296,38 +298,36 @@ impl GraphDb {
                         if relation.name == "MTRNord" || link.target == "4u98GV1CGlCn6PvxBerjrw==" {
                             continue;
                         }
-                        nodes.push(relation);
+                        nodes.insert(relation);
                     }
                 }
             }
         }
 
         // Remove broken links
-        let mut indices = Vec::new();
-        for (index, link) in all_links.iter_mut().enumerate() {
-            if !nodes.iter().any(|x| x.id == link.target) {
-                indices.push(index);
-            }
-            if !nodes.iter().any(|x| x.id == link.source) {
-                indices.push(index);
-            }
-        }
+        let node_ids: BTreeSet<String> = nodes.iter().map(|node| node.id.clone()).collect();
+        all_links.retain(|link| {
+            node_ids.contains(&link.target.to_string())
+                && node_ids.contains(&link.source.to_string())
+        });
 
-        for (often, index) in indices.iter().enumerate() {
-            all_links.remove(index - often);
-        }
-
-        for mut node in &mut nodes {
-            let links = all_links
-                .iter()
-                .filter(|x| (x.source == node.id || x.target == node.id) && x.source != x.target)
-                .count();
-            let incoming_links = all_links.iter().filter(|x| x.source == node.id).count();
-            let outgoing_links = all_links.iter().filter(|x| x.target == node.id).count();
-            node.weight = Some(links);
-            node.incoming_links = Some(incoming_links);
-            node.outgoing_links = Some(outgoing_links);
-        }
+        let nodes: BTreeSet<RoomRelation> = nodes
+            .into_iter()
+            .map(|mut node| {
+                let links = all_links
+                    .iter()
+                    .filter(|x| {
+                        (x.source == node.id || x.target == node.id) && x.source != x.target
+                    })
+                    .count();
+                let incoming_links = all_links.iter().filter(|x| x.target == node.id).count();
+                let outgoing_links = all_links.iter().filter(|x| x.source == node.id).count();
+                node.weight = Some(links);
+                node.incoming_links = Some(incoming_links);
+                node.outgoing_links = Some(outgoing_links);
+                node
+            })
+            .collect();
 
         RelationsJson {
             nodes,
@@ -341,14 +341,24 @@ impl GraphDb {
         room_id: &str,
     ) -> Option<RoomRelation> {
         if let Some(client) = crate::MATRIX_CLIENT.get() {
-            if let Some(room) = client.get_joined_room(&RoomId::try_from(room_id).unwrap()) {
+            let room_id_serialized = &RoomId::try_from(room_id).unwrap();
+
+            if let Some(room) = client
+                .joined_rooms()
+                .iter()
+                .find(|room| room.room_id() == room_id_serialized)
+            {
                 let alias = if let Some(alias) = room.canonical_alias() {
-                    alias.to_string()
+                    alias.as_str().into()
                 } else {
-                    room_id.to_string()
+                    room_id.into()
                 };
                 let name = if let Ok(name) = room.display_name().await {
-                    name
+                    if name.is_empty() {
+                        room_id.to_string()
+                    } else {
+                        name
+                    }
                 } else {
                     room_id.to_string()
                 };
@@ -356,12 +366,12 @@ impl GraphDb {
                 let topic = if let Some(topic) = room.topic() {
                     topic
                 } else {
-                    "".to_string()
+                    "".into()
                 };
                 let avatar_url = if let Some(avatar_url) = room.avatar_url() {
                     avatar_url.to_string()
                 } else {
-                    "".to_string()
+                    "".into()
                 };
                 return Some(RoomRelation {
                     id: room_hash,
@@ -372,7 +382,7 @@ impl GraphDb {
                     weight: None,
                     incoming_links: None,
                     outgoing_links: None,
-                    room_id: room_id.to_string(),
+                    room_id: room_id.into(),
                 });
             }
         }
@@ -382,8 +392,8 @@ impl GraphDb {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RelationsJson {
-    pub nodes: Vec<RoomRelation>,
-    pub links: Vec<Link>,
+    pub nodes: BTreeSet<RoomRelation>,
+    pub links: BTreeSet<Link>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -392,14 +402,14 @@ pub struct SSEJson {
     pub link: Link,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Ord, Eq, PartialOrd, Hash)]
 pub struct Link {
     pub source: String,
     pub target: String,
     pub value: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Ord, Eq, PartialOrd, Hash)]
 pub struct RoomRelation {
     pub id: String,
     pub room_id: String,

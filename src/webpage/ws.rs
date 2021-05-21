@@ -44,6 +44,7 @@ impl Ws {
                 let remove_client = async move {
                     // remove from clients
                     WEBSOCKET_CLIENTS.write().await.remove(&id);
+                    info!("WS Client removed");
                 };
 
                 let remove_client = actix::fut::wrap_future::<_, Self>(remove_client);

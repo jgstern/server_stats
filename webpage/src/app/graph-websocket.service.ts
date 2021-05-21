@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
-import { Observable, Observer, Subject } from 'rxjs';
+import { EMPTY, Observable, Subject, timer } from 'rxjs';
 import { Row } from './room-list/room-list.component';
+import { retryWhen, tap, delayWhen, switchAll, catchError } from 'rxjs/operators';
+import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
 
 
 export interface WsMessage {
@@ -11,36 +13,65 @@ export interface WsMessage {
   providedIn: 'root'
 })
 export class GraphWebsocketService {
-  private subject!: Subject<MessageEvent<WsMessage>>;
+  private socket?: WebSocketSubject<WsMessage>;
+  public messages?: Observable<WsMessage>;
 
   constructor() { }
 
-  public connect(): Subject<MessageEvent<WsMessage>> {
-    if (!this.subject) {
-      this.subject = this.create('wss://serverstats.nordgedanken.dev/ws');
-      console.log("Successfully connected: " + '/ws');
+  /**
+  * Creates a new WebSocket subject and send it to the messages subject
+  * @param cfg if true the observable will be retried.
+  */
+  public connect(cfg: { reconnect: boolean } = { reconnect: true }): void {
+
+    if (!this.socket || this.socket.closed) {
+      this.socket = this.getNewWebSocket();
+      const messages = this.socket.pipe(cfg.reconnect ? this.reconnect : o => o,
+        tap({
+          error: error => console.log(error),
+        }), catchError(_ => EMPTY))
+      this.messages = messages;
     }
-    return this.subject;
   }
 
-  private create(url: string): Subject<MessageEvent<WsMessage>> {
-    let ws = new WebSocket(url);
+  /**
+   * Retry a given observable by a time span
+   * @param observable the observable to be retried
+   */
+  private reconnect(observable: Observable<any>): Observable<any> {
+    return observable.pipe(retryWhen(errors => errors.pipe(tap(val => console.log('[WS] Try to reconnect', val)),
+      delayWhen(_ => timer(5)))));
+  }
 
-    let observable = new Observable((obs: Observer<MessageEvent<WsMessage>>) => {
-      ws.onmessage = obs.next.bind(obs);
-      ws.onerror = obs.error.bind(obs);
-      ws.onclose = obs.complete.bind(obs);
-      return ws.close.bind(ws);
-    });
-    let observer = {
-      next: (data: any) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify(data));
+
+  close() {
+    this.socket?.complete();
+    this.socket = undefined;
+  }
+
+  sendMessage(msg: any) {
+    this.socket?.next(msg);
+  }
+
+  /**
+   * Return a custom WebSocket subject which reconnects after failure
+   */
+  private getNewWebSocket(): WebSocketSubject<WsMessage> {
+    return webSocket({
+      url: 'wss://serverstats.nordgedanken.dev/ws',
+      openObserver: {
+        next: () => {
+          console.log('[WS]: connection ok');
         }
       },
-      error: (err: any) => console.error('Websocket got an error: ' + err),
-      complete: () => { },
-    };
-    return Subject.create(observer, observable);
+      closeObserver: {
+        next: () => {
+          console.log('[WS]: connection closed');
+          this.socket = undefined;
+          this.connect({ reconnect: true });
+        }
+      },
+
+    });
   }
 }

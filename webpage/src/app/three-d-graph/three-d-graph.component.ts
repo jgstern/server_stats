@@ -3,11 +3,10 @@ import ForceGraph3D, {
   ForceGraph3DInstance
 } from "3d-force-graph";
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass';
-import * as THREE from 'three';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
 import Autolinker from 'autolinker';
 import { APIData, Row } from '../room-list/room-list.component';
-import { GraphWebsocketService } from '../graph-websocket.service';
+import { ApiService } from '../api.service';
+import { Vector2 } from 'three';
 
 
 @Component({
@@ -35,39 +34,9 @@ export class ThreeDGraphComponent implements OnInit, AfterViewInit {
   alias_link_href: string = "";
   private graph?: ForceGraph3DInstance;
   data?: APIData;
+  first: boolean = true;
 
-  constructor(private http: HttpClient, private websocket: GraphWebsocketService) {
-    websocket.connect().subscribe(event => {
-      const data = event.data;
-      let graph_data = this.graph?.graphData();
-      let nodes_new = this.difference_nodes(graph_data?.nodes as Row[], data.node);
-      let links_new = this.difference_links(graph_data?.links as any[], data.link);
-      if (nodes_new.length !== 0 || links_new.length !== 0) {
-        let new_data = {
-          nodes: [...graph_data?.nodes as object[], ...nodes_new],
-          links: [...graph_data?.links as object[], ...links_new]
-        };
-        this.data = new_data as APIData;
-        this.graph?.graphData(new_data);
-      }
-    });
-  }
-
-  difference_nodes(old: Row[], newd: Row) {
-    if (!old.some(node_old => node_old.id == newd.id)) {
-      return [newd];
-    } else {
-      return [];
-    }
-  }
-
-  difference_links(old: any[], newd: any) {
-    if (!old.some(link_old => link_old.source.id == newd.source && newd.target == link_old.target.id)) {
-      return [newd];
-    } else {
-      return [];
-    }
-  }
+  constructor(private api: ApiService) { }
 
   setupGraph() {
     this.sidebar.nativeElement.addEventListener('animationend', (e: { preventDefault: () => void; }) => {
@@ -85,7 +54,7 @@ export class ThreeDGraphComponent implements OnInit, AfterViewInit {
       this.sidebar.nativeElement.setAttribute('animation', 'close_anim');
     })
 
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.35, 0, 0.1);
+    const bloomPass = new UnrealBloomPass(new Vector2(window.innerWidth, window.innerHeight), 0.35, 0, 0.1);
     this.graph!.renderer().toneMappingExposure = Math.pow(1, 4.0);
 
     this.graph?.onNodeClick((node: any) => {
@@ -118,12 +87,15 @@ export class ThreeDGraphComponent implements OnInit, AfterViewInit {
     this.windowResize();
   }
 
+  difference_nodes(object: any[], base: any[]) {
+    return object.filter(node_new => !base.some(node_old => node_new.id == node_old.id));
+  }
+
+  difference_links(object: any[], base: any[]) {
+    return object.filter(link_new => !base.some(link_old => link_new.source == link_old.source.id && link_new.target == link_old.target.id));
+  }
+
   ngAfterViewInit() {
-    //TODO use public iphttp://localhost:3332
-    this.http.get<APIData>('/relations', { headers: new HttpHeaders({ 'Content-Type': 'application/json', }) }).subscribe((data: APIData) => {
-      this.data = data;
-      this.setupGraph();
-    });
     this.graph = ForceGraph3D()(this.graph_element.nativeElement).warmupTicks(50)
       .backgroundColor('#101020')
       .nodeRelSize(6)
@@ -137,6 +109,34 @@ export class ThreeDGraphComponent implements OnInit, AfterViewInit {
       .linkDirectionalParticleWidth(1)
       .linkDirectionalParticleSpeed(0.003)
       .onNodeHover(node => this.graph_element.nativeElement.style.cursor = node ? 'pointer' : null);
+    if (this.api.data != null && this.first) {
+      this.data = this.api.data;
+      this.setupGraph();
+      this.first = false;
+    }
+    this.api.getDataUpdates().subscribe((data) => {
+      if (data != null) {
+        this.data = data;
+        if (this.first) {
+          this.setupGraph();
+          this.first = false;
+        }
+        if (this.graph != null) {
+          let graph_data = this.graph.graphData();
+          let nodes_new = this.difference_nodes(this.data.nodes, graph_data?.nodes as any[]);
+          let links_new = this.difference_links(this.data.links, graph_data?.links as any[]);
+          if (nodes_new.length !== 0 || links_new.length !== 0) {
+            let new_data = {
+              nodes: [...graph_data?.nodes as object[], ...nodes_new],
+              links: [...graph_data?.links as object[], ...links_new]
+            };
+            this.data = new_data as APIData;
+            this.graph.graphData(new_data);
+          }
+        }
+      }
+
+    });
   }
 
 

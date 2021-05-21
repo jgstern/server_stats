@@ -1,0 +1,120 @@
+<nz-layout class="layout">
+    <nz-header>
+        <div class="logo"></div>
+        <ul nz-menu nzTheme="dark" nzMode="horizontal">
+            <li nz-menu-item>
+                <a routerLink="/">
+                    Home
+                </a>
+            </li>
+
+            <li nz-menu-item>
+                <a routerLink="/links">Link Finder</a>
+            </li>
+            <li nz-menu-item>
+                <a routerLink="/3d">3D Graph</a>
+            </li>
+            <li nz-menu-item nzSelected>
+                <a routerLink="/faq" routerLinkActive="active">FAQ</a>
+            </li>
+            <li nz-menu-item>Github</li>
+        </ul>
+    </nz-header>
+    <nz-content>
+        <nz-breadcrumb>
+            <nz-breadcrumb-item>Home</nz-breadcrumb-item>
+            <nz-breadcrumb-item>FAQ</nz-breadcrumb-item>
+        </nz-breadcrumb>
+        <div class="inner-content">
+            <h1 nz-typography>FAQ</h1>
+
+            <h2 nz-typography>How can I remove the bot from my Room?</h2>
+            <p nz-typography>
+                You can choose between 2 variants to remove it:
+            </p>
+
+            <ul>
+                <li>You kick it -> This causes the bot to leave until the room is mentioned again somewhere.</li>
+                <li>You ban it -> This results in the bot not joining again unless you unban it.</li>
+            </ul>
+            <h2 nz-typography>Is the bot hostile?</h2>
+            <p nz-typography>
+                No. It doesnt spam messages, it doesnt't record any of your messages permanently, it doesn't record who
+                mentioned a room and it doesn't record when a room was mentioned.
+            </p>
+            <h2 nz-typography>What data is collected and stored?</h2>
+            <p nz-typography>
+                To this question 2 things are needed to be known:
+            </p>
+            <ol>
+                <li>The Bot has an internal database of every room it found</li>
+                <li>It has access like any regular user to the room data</li>
+            </ol>
+            <p nz-typography>
+                For the first half the bot records the room id, a hash of that room id and the childs of a room and the
+                parents of that room based on the room id hash.<br />
+
+                For the second half the same thing as with anything applies to the data. The bot can see members, topic,
+                avatar, room name. It can't see messages of the past as those after scanning for aliases get cleared
+                from
+                synapse due to the space required.
+            </p>
+            <p nz-typography>
+
+                However only a subset of that data will ever be publicly made available. This includes:
+            </p>
+            <ul>
+                <li>The Room Name</li>
+                <li>The Room Topic</li>
+                <li>The Room Avatar</li>
+                <li>The Room Alias</li>
+                <li>The Room ID</li>
+                <li>The Member Count</li>
+                <li>The relations of which room mentioned which room</li>
+            </ul>
+            <h2 nz-typography>How reliable is the data?</h2>
+            <p nz-typography>
+                The data due to the way it gathers data is not 100% reliable. This is because rooms are missing where
+                the bot got banned from, the bot didnt yet find or because of bugs that happened along the way.
+            </p>
+            <h3 nz-typography>Known Data Issues</h3>
+            <h4 nz-typography>Ingoing and outgoing count is exactly the same for some rooms</h4>
+            <p nz-typography>
+                This happened for around the first week due to a bug in the code where relations incorrectly got saved.
+                This cannot be recovered due to the massive amount of requests necessary to rebuild that data. Also
+                identifying the issue via code at this point would be way to difficult.
+            </p>
+            <h2 nz-typography>Where do I find an API?</h2>
+            <h3 nz-typography>JSON API</h3>
+            <p nz-typography>
+                Currently there exists an API to get the full data chunk at <a
+                    href="https://serverstats.nordgedanken.dev/relations">https://serverstats.nordgedanken.dev/relations</a>
+                which contains all the rooms and links. Please do NOT scrape this too often as it is expensive for the
+                server currently. Instead use the API once and then listen via the websocket for updates when
+                possible.
+            </p>
+            <h3 nz-typography>Updates Websocket API</h3>
+            <p nz-typography>
+                You can find a websocket at wss://serverstats.nordgedanken.dev/ws which pushes any new room relation as
+                soon as it got saved to the internal database. It is exactly the same as the json API except that it
+                only has the singular forms as keys.
+                Important is also that you need to check if you already have a room on the client side. The server
+                doesnt check if the room was already published before.
+            </p>
+            <h2 nz-typography>Where do I find the source?</h2>
+            <p nz-typography>
+                The Source code is available at <a
+                    href="https://github.com/MTRNord/server_stats">https://github.com/MTRNord/server_stats</a>
+            </p>
+            <h2 nz-typography>Who is in charge and how can I contact them?</h2>
+            <p nz-typography>
+                In charge of this Project is Marcel or more well known MTRNord. I can be reached via my Matrix ID <a
+                    href="https://matrix.to/#/@mtrnord:nordgedanken.dev">@mtrnord:nordgedanken.dev</a>.
+                For general project related things there is a room available at <a
+                    href="https://matrix.to/#/#server_stats:nordgedanken.dev">#server_stats:nordgedanken.dev</a>.
+            </p>
+
+        </div>
+    </nz-content>
+    <nz-footer>TODO</nz-footer>
+</nz-layout>

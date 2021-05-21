@@ -2,18 +2,18 @@
     <nz-header>
         <div class="logo"></div>
         <ul nz-menu nzTheme="dark" nzMode="horizontal">
-            <a nz-menu-item routerLink="/">
-                <li>Home</li>
-            </a>
-            <a nz-menu-item routerLink="/links" nzSelected routerLinkActive="active">
-                <li>Link Finder</li>
-            </a>
-            <a routerLink="/3d" nz-menu-item>
-                <li>3D Graph</li>
-            </a>
-            <li nz-menu-item>AR Graph</li>
-            <li nz-menu-item>VR Graph</li>
-            <li nz-menu-item>FAQ</li>
+            <li nz-menu-item>
+                <a routerLink="/">Home</a>
+            </li>
+            <li nz-menu-item nzSelected>
+                <a routerLink="/links" routerLinkActive="active">Link Finder</a>
+            </li>
+            <li nz-menu-item>
+                <a routerLink="/3d">3D Graph</a>
+            </li>
+            <li nz-menu-item>
+                <a routerLink="/faq">FAQ</a>
+            </li>
             <li nz-menu-item>Github</li>
         </ul>
     </nz-header>
@@ -24,6 +24,10 @@
         </nz-breadcrumb>
         <div class="inner-content">
             <h1 nz-typography>Link Finder</h1>
+            <p nz-typography>
+                Start typing a room name to get links.
+            </p>
+            <h3 nz-typography>Room: {{this.room_name}}</h3>
             <nz-input-group nzCompact>
                 <nz-select [ngModel]="'outgoing'" (ngModelChange)="updateSelection($event)">
                     <nz-option [nzLabel]="'Outgoing'" [nzValue]="'outgoing'"></nz-option>

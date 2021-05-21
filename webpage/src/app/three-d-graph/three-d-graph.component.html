@@ -2,18 +2,18 @@
     <nz-header>
         <div class="logo"></div>
         <ul nz-menu nzTheme="dark" nzMode="horizontal">
-            <a nz-menu-item routerLink="/">
-                <li>Home</li>
+            <li nz-menu-item>
+                <a routerLink="/">Home</a>
+            </li>
+            <li nz-menu-item>
+                <a routerLink="/links">Link Finder</a>
+            </li>
+            <a nz-menu-item nzSelected>
+                <a routerLink="/3d" routerLinkActive="active">3D Graph</a>
             </a>
-            <a nz-menu-item routerLink="/links">
-                <li>Link Finder</li>
-            </a>
-            <a nz-menu-item nzSelected routerLink="/3d" routerLinkActive="active">
-                <li>3D Graph</li>
-            </a>
-            <li nz-menu-item>AR Graph</li>
-            <li nz-menu-item>VR Graph</li>
-            <li nz-menu-item>FAQ</li>
+            <li nz-menu-item>
+                <a routerLink="/faq">FAQ</a>
+            </li>
             <li nz-menu-item>Github</li>
         </ul>
     </nz-header>

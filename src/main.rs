@@ -65,7 +65,7 @@ pub static WEBSOCKET_CLIENTS: Lazy<RwLock<HashMap<String, Addr<Ws>>>> =
 pub static MATRIX_CLIENT: OnceCell<Client> = OnceCell::new();
 pub static PG_POOL: OnceCell<PgPool> = OnceCell::new();
 pub static CACHE_DB: Lazy<CacheDb> = Lazy::new(CacheDb::new);
-pub static MESSAGES_SEMPAHORE: Lazy<Arc<Semaphore>> = Lazy::new(|| Arc::new(Semaphore::new(300)));
+pub static MESSAGES_SEMPAHORE: Lazy<Arc<Semaphore>> = Lazy::new(|| Arc::new(Semaphore::new(50)));
 
 pub static APP_USER_AGENT: &str = concat!("MTRNord/", env!("CARGO_PKG_NAME"),);
 
@@ -137,7 +137,9 @@ async fn main() -> Result<()> {
         // any directives parsed from the env variable.
         .add_directive("server_stats=info".parse()?)
         .add_directive("sled=info".parse()?)
-        //.add_directive("matrix_sdk=debug".parse()?)
+        //.add_directive("matrix_sdk=info".parse()?)
+        //.add_directive("matrix_sdk_base::client=off".parse()?)
+        //.add_directive("matrix_sdk_appservice::actix::push_transactions=off".parse()?)
         //.add_directive("actix_server=info".parse()?)
         //.add_directive("actix_web=info".parse()?)
         .add_directive("rustls::session=off".parse()?);
@@ -215,6 +217,7 @@ async fn main() -> Result<()> {
             .service(web::resource("/").to(index_page))
             .service(web::resource("/3d").to(index_page))
             .service(web::resource("/links").to(index_page))
+            .service(web::resource("/faq").to(index_page))
             .service(web::resource("/2d").to(two_d_page))
             .service(web::resource("/vr").to(vr_page))
             .service(web::resource("/ar").to(ar_page))
