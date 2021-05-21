@@ -72,7 +72,15 @@ export class LinkFinderComponent implements OnInit {
     const result = fuse.search(val);
     if (result.length == 0) {
       if (this.api.data != null) {
-        this.rows = this.api.data.nodes;
+        const nodes = this.api.data.nodes.map(data => {
+          if (data.updated === false) {
+            data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+            data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
+            data.updated = true;
+          }
+          return data;
+        });
+        this.rows = nodes;
       }
 
       return;
@@ -89,10 +97,24 @@ export class LinkFinderComponent implements OnInit {
     this.room_name = result[0].item["name"];
     if (indexName == "incoming") {
       const links = this.links.filter(link => link["target"] === room_hash);
-      this.rows = this.temp.filter(node => links.some(value => node["id"] === value["source"]))
+      this.rows = this.temp.filter(node => links.some(value => node["id"] === value["source"])).map(data => {
+        if (data.updated === false) {
+          data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+          data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
+          data.updated = true;
+        }
+        return data;
+      });
     } else if (indexName == "outgoing") {
       const links = this.links.filter(link => link["source"] === room_hash);
-      this.rows = this.temp.filter(node => links.some(value => node["id"] === value["target"]))
+      this.rows = this.temp.filter(node => links.some(value => node["id"] === value["target"])).map(data => {
+        if (data.updated === false) {
+          data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+          data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
+          data.updated = true;
+        }
+        return data;
+      });
     }
     // Whenever the filter changes, always go back to the first page
     this.table.offset = 0;

@@ -10,6 +10,7 @@ export interface Row {
   avatar: string;
   topic: string;
   weight: string;
+  updated: boolean;
 }
 export interface APIData {
   nodes: Row[],

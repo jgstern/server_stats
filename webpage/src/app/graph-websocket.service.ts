@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
 import { EMPTY, Observable, Subject, timer } from 'rxjs';
-import { Row } from './room-list/room-list.component';
 import { retryWhen, tap, delayWhen, switchAll, catchError } from 'rxjs/operators';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
+import { Row } from './api.service';
 
 
 export interface WsMessage {

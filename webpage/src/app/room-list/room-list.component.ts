@@ -1,21 +1,10 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
 import { ColumnMode, DatatableComponent } from '@swimlane/ngx-datatable';
 import Autolinker from 'autolinker';
-import { ApiService } from '../api.service';
+import { ApiService, Row } from '../api.service';
 import Fuse from 'fuse.js';
 
-export interface Row {
-  id: string;
-  name: string;
-  alias: string;
-  avatar: string;
-  topic: string;
-  weight: string;
-}
-export interface APIData {
-  nodes: Row[],
-  links: any[]
-}
+
 @Component({
   selector: 'app-room-list',
   templateUrl: './room-list.component.html',
@@ -48,11 +37,6 @@ export class RoomListComponent implements OnInit {
     this.api.getDataUpdates().subscribe(data => {
       if (data != null && data != undefined) {
         let nodes = data.nodes;
-        nodes = nodes.map(data => {
-          data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
-          data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
-          return data;
-        });
         this.temp = nodes;
         this.rows = nodes;
       }
@@ -87,7 +71,16 @@ export class RoomListComponent implements OnInit {
     const result = fuse.search(val);
     if (result.length == 0) {
       if (this.api.data != null) {
-        this.rows = this.api.data.nodes;
+        const nodes = this.api.data.nodes.map(data => {
+          if (data.updated === false) {
+            data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+            data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
+            data.updated = true;
+          }
+          return data;
+
+        });
+        this.rows = nodes;
       }
       return;
     }
@@ -101,7 +94,14 @@ export class RoomListComponent implements OnInit {
 
     const temp = result.map(e => e.item);
     // update the rows
-    this.rows = temp;
+    this.rows = temp.map(data => {
+      if (data.updated === false) {
+        data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+        data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
+        data.updated = true;
+      }
+      return data;
+    });
     // Whenever the filter changes, always go back to the first page
     this.table.offset = 0;
   }

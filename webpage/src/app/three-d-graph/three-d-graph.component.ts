@@ -4,8 +4,7 @@ import ForceGraph3D, {
 } from "3d-force-graph";
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass';
 import Autolinker from 'autolinker';
-import { APIData, Row } from '../room-list/room-list.component';
-import { ApiService } from '../api.service';
+import { APIData, ApiService } from '../api.service';
 import { Vector2 } from 'three';
 
 

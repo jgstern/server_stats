@@ -14,7 +14,7 @@
             <li nz-menu-item>
                 <a routerLink="/faq">FAQ</a>
             </li>
-            <li nz-menu-item>Github</li>
+            <li nz-menu-item><a href="https://github.com/MTRNord/server_stats">Github</a></li>
         </ul>
     </nz-header>
     <nz-content>
@@ -29,9 +29,9 @@
             </p>
             <h3 nz-typography>Room: {{this.room_name}}</h3>
             <nz-input-group nzCompact>
-                <nz-select [ngModel]="'outgoing'" (ngModelChange)="updateSelection($event)">
-                    <nz-option [nzLabel]="'Outgoing'" [nzValue]="'outgoing'"></nz-option>
+                <nz-select [ngModel]="'incoming'" (ngModelChange)="updateSelection($event)">
                     <nz-option [nzLabel]="'Incoming'" [nzValue]="'incoming'"></nz-option>
+                    <nz-option [nzLabel]="'Outgoing'" [nzValue]="'outgoing'"></nz-option>
                 </nz-select>
                 <input type="text" nz-input placeholder="Type to filter the name column..."
                     (keyup)="updateFilter($event)" style="width:90%;" />
