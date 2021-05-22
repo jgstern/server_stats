@@ -20,26 +20,45 @@ export class LinkFinderComponent implements OnInit {
   filterColumn = 'incoming';
   columns = [{ prop: 'name', name: 'Roomname' }, { name: 'Alias' }, { prop: 'room_id', name: 'Room ID' }, { name: 'Topic' }, { prop: 'incoming_links', name: 'Incoming Links' }, { prop: 'outgoing_links', name: 'Outgoing Links' }];
   ColumnMode = ColumnMode;
+  first = true;
 
   constructor(public api: ApiService) { }
 
   ngOnInit(): void {
     if (this.api.data != null) {
-      this.rows = this.api.data.nodes;
+
       this.links = this.api.data.links;
       this.temp = this.rows;
+      if (this.first) {
+        this.rows = this.api.data.nodes;
+        this.rows = this.rows.filter(node => this.links.some(value => node["id"] === value["target"])).map(data => {
+          if (data.updated === false || data.updated == null) {
+            data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+            data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
+            data.updated = true;
+          }
+          return data;
+        });
+        this.first = false;
+      }
     }
     this.api.getDataUpdates().subscribe(data => {
       if (data != null) {
-        let nodes = data.nodes;
-        nodes = nodes.map(data => {
-          data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
-          data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
-          return data;
-        });
+        const nodes = data.nodes;
         this.temp = nodes;
-        this.rows = nodes;
         this.links = data.links;
+        if (this.first) {
+          this.rows = nodes;
+          this.rows = this.rows.filter(node => this.links.some(value => node["id"] === value["target"])).map(data => {
+            if (data.updated === false || data.updated == null) {
+              data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+              data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
+              data.updated = true;
+            }
+            return data;
+          });
+          this.first = false;
+        }
       }
     })
   }
@@ -73,7 +92,7 @@ export class LinkFinderComponent implements OnInit {
     if (result.length == 0) {
       if (this.api.data != null) {
         const nodes = this.api.data.nodes.map(data => {
-          if (data.updated === false) {
+          if (data.updated === false || data.updated == null) {
             data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
             data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
             data.updated = true;
@@ -98,7 +117,7 @@ export class LinkFinderComponent implements OnInit {
     if (indexName == "incoming") {
       const links = this.links.filter(link => link["target"] === room_hash);
       this.rows = this.temp.filter(node => links.some(value => node["id"] === value["source"])).map(data => {
-        if (data.updated === false) {
+        if (data.updated === false || data.updated == null) {
           data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
           data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
           data.updated = true;
@@ -108,7 +127,7 @@ export class LinkFinderComponent implements OnInit {
     } else if (indexName == "outgoing") {
       const links = this.links.filter(link => link["source"] === room_hash);
       this.rows = this.temp.filter(node => links.some(value => node["id"] === value["target"])).map(data => {
-        if (data.updated === false) {
+        if (data.updated === false || data.updated == null) {
           data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
           data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
           data.updated = true;

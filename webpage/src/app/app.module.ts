@@ -23,6 +23,7 @@ import { RoomListComponent } from './room-list/room-list.component';
 import { LinkyModule } from 'ngx-linky';
 import { ThreeDGraphComponent } from './three-d-graph/three-d-graph.component';
 import { FaqComponent } from './faq/faq.component';
+import { SpaceFinderComponent } from './space-finder/space-finder.component';
 
 registerLocaleData(en);
 
@@ -32,7 +33,8 @@ registerLocaleData(en);
     LinkFinderComponent,
     RoomListComponent,
     ThreeDGraphComponent,
-    FaqComponent
+    FaqComponent,
+    SpaceFinderComponent
   ],
   imports: [
     BrowserModule,

@@ -5,12 +5,12 @@
             <li nz-menu-item>
                 <a routerLink="/">Home</a>
             </li>
-            <a nz-menu-item>
-                <a routerLink="/spaces">Space List</a>
+            <a nz-menu-item nzSelected>
+                <a routerLink="/spaces" routerLinkActive="active">Space List</a>
             </a>
-            <li nz-menu-item nzSelected>
-                <a routerLink="/links" routerLinkActive="active">Link Finder</a>
-            </li>
+            <a nz-menu-item>
+                <a routerLink="/links">Link Finder</a>
+            </a>
             <li nz-menu-item>
                 <a routerLink="/3d">3D Graph</a>
             </li>
@@ -23,24 +23,20 @@
     <nz-content>
         <nz-breadcrumb>
             <nz-breadcrumb-item>Home</nz-breadcrumb-item>
-            <nz-breadcrumb-item>Link Finder</nz-breadcrumb-item>
+            <nz-breadcrumb-item>Space List</nz-breadcrumb-item>
         </nz-breadcrumb>
         <div class="inner-content">
-            <h1 nz-typography>Link Finder</h1>
-            <p nz-typography>
-                Start typing a room name to get links.
-            </p>
-            <h3 nz-typography>Room: {{this.room_name}}</h3>
+            <h1 nz-typography>Space List</h1>
             <nz-input-group nzCompact>
-                <nz-select [ngModel]="'incoming'" (ngModelChange)="updateSelection($event)">
-                    <nz-option [nzLabel]="'Incoming'" [nzValue]="'incoming'"></nz-option>
-                    <nz-option [nzLabel]="'Outgoing'" [nzValue]="'outgoing'"></nz-option>
+                <nz-select [ngModel]="'name'" (ngModelChange)="updateSelection($event)">
+                    <nz-option [nzLabel]="'Spacename'" [nzValue]="'name'"></nz-option>
+                    <nz-option [nzLabel]="'Alias'" [nzValue]="'alias'"></nz-option>
                 </nz-select>
                 <input type="text" nz-input placeholder="Type to filter the name column..."
                     (keyup)="updateFilter($event)" style="width:90%;" />
             </nz-input-group>
             <br /><br />
-            <ngx-datatable #table class="material" [rows]="rows" [columns]="columns" [headerHeight]="40"
+            <ngx-datatable #table class="material" [rows]="this.rows" [columns]="columns" [headerHeight]="40"
                 [summaryRow]="false" [footerHeight]="40" [limit]="10" rowHeight="auto" [columnMode]="ColumnMode.force">
             </ngx-datatable>
         </div>

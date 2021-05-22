@@ -138,6 +138,7 @@ impl GraphDb {
                         incoming_links: None,
                         outgoing_links: None,
                         room_id: child.into(),
+                        is_space: room.is_space(),
                     },
                     link: Link {
                         source: base64::encode(parent_hash.to_le_bytes()),
@@ -383,6 +384,7 @@ impl GraphDb {
                     incoming_links: None,
                     outgoing_links: None,
                     room_id: room_id.into(),
+                    is_space: room.is_space(),
                 });
             }
         }
@@ -420,4 +422,5 @@ pub struct RoomRelation {
     pub weight: Option<usize>,
     pub incoming_links: Option<usize>,
     pub outgoing_links: Option<usize>,
+    pub is_space: bool,
 }

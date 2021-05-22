@@ -10,7 +10,8 @@ export interface Row {
   avatar: string;
   topic: string;
   weight: string;
-  updated: boolean;
+  is_space: boolean;
+  updated?: boolean;
 }
 export interface APIData {
   nodes: Row[],

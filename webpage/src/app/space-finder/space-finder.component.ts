@@ -1,16 +1,15 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
 import { ColumnMode, DatatableComponent } from '@swimlane/ngx-datatable';
 import Autolinker from 'autolinker';
-import { ApiService, Row } from '../api.service';
 import Fuse from 'fuse.js';
-
+import { ApiService, Row } from '../api.service';
 
 @Component({
-  selector: 'app-room-list',
-  templateUrl: './room-list.component.html',
-  styleUrls: ['./room-list.component.scss']
+  selector: 'app-space-finder',
+  templateUrl: './space-finder.component.html',
+  styleUrls: ['./space-finder.component.scss']
 })
-export class RoomListComponent implements OnInit {
+export class SpaceFinderComponent implements OnInit {
   @ViewChild(DatatableComponent)
   table!: DatatableComponent;
 
@@ -18,7 +17,7 @@ export class RoomListComponent implements OnInit {
   filterColumn = 'name';
   rows: Row[] = [];
   temp: Row[] = [];
-  columns = [{ prop: 'name', name: 'Roomname' }, { name: 'Alias' }, { prop: 'room_id', name: 'Room ID' }, { name: 'Topic' }, { prop: 'incoming_links', name: 'Incoming Links' }, { prop: 'outgoing_links', name: 'Outgoing Links' }];
+  columns = [{ prop: 'name', name: 'Roomname' }, { name: 'Alias' }, { prop: 'room_id', name: 'Room ID' }, { prop: 'incoming_links', name: 'Incoming Links' }];
   ColumnMode = ColumnMode;
   first = true;
 
@@ -27,9 +26,10 @@ export class RoomListComponent implements OnInit {
   ngOnInit(): void {
     if (this.api.data != null && this.api.data != undefined) {
       const data = this.api.data;
-      this.rows = data.nodes;
       if (data.nodes != null && data.nodes != undefined) {
-        const nodes = data.nodes;
+        const nodes = data.nodes.filter(room => {
+          return room.is_space;
+        });
         this.temp = nodes;
         if (this.first) {
           this.rows = nodes;
@@ -50,9 +50,13 @@ export class RoomListComponent implements OnInit {
     this.api.getDataUpdates().subscribe(data => {
       if (data != null && data != undefined) {
         const nodes = data.nodes;
-        this.temp = nodes;
+        this.temp = nodes.filter(room => {
+          return room.is_space;
+        });
         if (this.first) {
-          this.rows = nodes;
+          this.rows = nodes.filter(room => {
+            return room.is_space;
+          });
           this.rows = this.rows.map(data => {
             if (data.updated === false || data.updated == null) {
               data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;

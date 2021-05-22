@@ -4,8 +4,9 @@ use matrix_sdk::{
     api::r0::config::get_global_account_data::Request as GlobalAccountDataGetRequest,
     api::r0::config::set_global_account_data::Request as GlobalAccountDataSetRequest,
     api::r0::{
-        filter::RoomEventFilter,
+        filter::{FilterDefinition, LazyLoadOptions, RoomEventFilter, RoomFilter},
         message::get_message_events::{Direction, Request as MessagesRequest},
+        sync::sync_events::Filter,
     },
     assign, async_trait,
     events::{
@@ -18,7 +19,7 @@ use matrix_sdk::{
     },
     identifiers::{EventId, RoomIdOrAliasId, UserId},
     room::{Joined, Room},
-    uint, Client, EventHandler, Raw,
+    uint, Client, EventHandler, LoopCtrl, Raw, SyncSettings,
 };
 use matrix_sdk_appservice::{Appservice, AppserviceRegistration};
 use once_cell::sync::Lazy;
@@ -36,12 +37,46 @@ pub async fn generate_appservice(config: &Config<'_>) -> Appservice {
         .await
         .unwrap();
 
-    let client = appservice.client(None).await;
+    /*let client = appservice.client(Some("server_stats")).await;
+    tokio::spawn(async move {
+        let mut filter = FilterDefinition::default();
+        let mut room_filter = RoomFilter::default();
+        let mut event_filter = RoomEventFilter::default();
+        let mut timeline_event_filter = RoomEventFilter::default();
+
+        event_filter.lazy_load_options = LazyLoadOptions::Enabled {
+            include_redundant_members: false,
+        };
+        timeline_event_filter.lazy_load_options = LazyLoadOptions::Enabled {
+            include_redundant_members: false,
+        };
+        room_filter.state = event_filter;
+        room_filter.timeline = timeline_event_filter;
+        filter.room = room_filter;
+        let filter_id = client
+            .get_or_upload_filter("state_reload", filter)
+            .await
+            .unwrap();
+
+        let sync_settings = SyncSettings::new()
+            .filter(Filter::FilterId(&filter_id))
+            .full_state(true)
+            .timeout(Duration::from_secs(5 * 60));
+        client
+            .sync_with_callback(sync_settings, |response| async move {
+                info!("Got sync");
+
+                LoopCtrl::Break
+            })
+            .await;
+        info!("Finished Sync");
+    });*/
+    let client = appservice.client(Some("server_stats")).await;
     crate::MATRIX_CLIENT.set(client);
 
     let event_handler = VoyagerBot::new(appservice.clone());
 
-    let client = appservice.client(None).await;
+    let client = appservice.client(Some("server_stats")).await;
     client.set_event_handler(Box::new(event_handler)).await;
 
     appservice
@@ -414,7 +449,7 @@ impl EventHandler for VoyagerBot {
         }
 
         if let MembershipState::Invite = event.content.membership {
-            let client = self.appservice.client(None).await;
+            let client = self.appservice.client(Some("server_stats")).await;
             client.join_room_by_id(room.room_id()).await.unwrap();
             VoyagerBot::set_direct(client, room.clone(), event).await;
             info!("Successfully joined room {}", room.room_id());
@@ -464,7 +499,7 @@ impl EventHandler for VoyagerBot {
             }
 
             // Handle message
-            let client = self.appservice.client(None).await;
+            let client = self.appservice.client(Some("server_stats")).await;
             tokio::spawn(async move {
                 VoyagerBot::process_message(client, &msg_body, room, Some(event_id)).await;
             });
