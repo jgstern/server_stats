@@ -49,10 +49,10 @@ export class SpaceFinderComponent implements OnInit {
     }
     this.api.getDataUpdates().subscribe(data => {
       if (data != null && data != undefined) {
-        const nodes = data.nodes;
-        this.temp = nodes.filter(room => {
+        const nodes = data.nodes.filter(room => {
           return room.is_space;
         });
+        this.temp = nodes;
         if (this.first) {
           this.rows = nodes.filter(room => {
             return room.is_space;
