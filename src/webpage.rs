@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use actix_web::http::header::{CacheControl, CacheDirective};
 use actix_web::{body::Body, HttpRequest, HttpResponse, Result};
 use askama_actix::{Template, TemplateToResponse};
 use mime_guess::from_path;
@@ -46,6 +47,7 @@ fn handle_embedded_assets_file(path: &str) -> HttpResponse {
                 Cow::Owned(bytes) => bytes.into(),
             };
             HttpResponse::Ok()
+                .insert_header(CacheControl(vec![CacheDirective::MaxAge(31536000u32)]))
                 .content_type(from_path(path).first_or_octet_stream().as_ref())
                 .body(body)
         }
@@ -65,6 +67,7 @@ fn handle_embedded_file(path: &str) -> HttpResponse {
                 Cow::Owned(bytes) => bytes.into(),
             };
             HttpResponse::Ok()
+                .insert_header(CacheControl(vec![CacheDirective::MaxAge(31536000u32)]))
                 .content_type(from_path(path).first_or_octet_stream().as_ref())
                 .body(body)
         }
