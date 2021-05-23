@@ -17,7 +17,7 @@ use matrix_sdk::{
         },
         AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, SyncMessageEvent, SyncStateEvent,
     },
-    identifiers::{EventId, RoomIdOrAliasId, UserId},
+    identifiers::{EventId, RoomIdOrAliasId, ServerName, ServerNameBox, UserId},
     room::{Joined, Room},
     uint, Client, EventHandler, LoopCtrl, Raw, SyncSettings,
 };
@@ -343,8 +343,15 @@ impl VoyagerBot {
         // Join the room via the server
         match RoomIdOrAliasId::try_from(room_alias) {
             Ok(room_id_or_alias) => {
+                let matrix_org = <&ServerName>::try_from("matrix.org").unwrap();
                 match client
-                    .join_room_by_id_or_alias(&room_id_or_alias, &[])
+                    .join_room_by_id_or_alias(
+                        &room_id_or_alias,
+                        &[
+                            room_id_or_alias.server_name().to_owned(),
+                            matrix_org.to_owned(),
+                        ],
+                    )
                     .await
                 {
                     Ok(resp) => {
