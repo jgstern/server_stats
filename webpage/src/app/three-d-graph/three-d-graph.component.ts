@@ -13,9 +13,12 @@ import { Vector2 } from 'three';
   templateUrl: './three-d-graph.component.html',
   styleUrls: ['./three-d-graph.component.scss']
 })
-export class ThreeDGraphComponent implements OnInit, AfterViewInit {
+export class ThreeDGraphComponent implements AfterViewInit {
   @ViewChild('graph')
   graph_element!: ElementRef<any>;
+
+  @ViewChild('wrapper')
+  wrapper?: ElementRef<any>;
 
   @ViewChild('sidebar')
   sidebar!: ElementRef<any>;
@@ -141,14 +144,16 @@ export class ThreeDGraphComponent implements OnInit, AfterViewInit {
 
   @HostListener("window:resize")
   public windowResize() {
-    const box = this.graph_element.nativeElement.getBoundingClientRect();
+    const box = this.wrapper?.nativeElement.getBoundingClientRect();
     this.graph?.width(box.width);
     this.graph?.height(box.height);
     // @ts-ignore
     this.graph?.controls().handleResize();
   }
 
-  ngOnInit() {
+  @HostListener("document:fullscreenchange", [])
+  fullScreen() {
+    this.windowResize()
   }
 
 }
