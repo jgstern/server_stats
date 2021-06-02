@@ -1,7 +1,12 @@
-use crate::webpage::ws::WsMessage;
+use crate::{
+    errors::Errors,
+    webpage::{
+        api::{Jsonline, Link, RelationsJson, RoomRelation, SSEJson},
+        ws::WsMessage,
+    },
+};
 use color_eyre::Result;
 use matrix_sdk::identifiers::RoomId;
-use serde::{Deserialize, Serialize};
 use sled::{IVec, Iter};
 use std::{
     borrow::Cow,
@@ -10,7 +15,7 @@ use std::{
 };
 use tracing::error;
 
-type RelationsMix = Vec<((u128, String), BTreeSet<u128>)>;
+type RelationsMix = Vec<((String, String), BTreeSet<u128>)>;
 
 #[derive(Debug)]
 pub struct GraphDb {
@@ -127,6 +132,11 @@ impl GraphDb {
                 {
                     return Ok(());
                 }
+                let members = if let Ok(members) = room.joined_members().await {
+                    members.len()
+                } else {
+                    0
+                };
                 let sse_json = SSEJson {
                     node: RoomRelation {
                         id: base64::encode(child_hash.to_le_bytes()),
@@ -139,6 +149,7 @@ impl GraphDb {
                         outgoing_links: None,
                         room_id: child.into(),
                         is_space: room.is_space(),
+                        members: members.try_into().unwrap(),
                     },
                     link: Link {
                         source: base64::encode(parent_hash.to_le_bytes()),
@@ -215,25 +226,42 @@ impl GraphDb {
         self.parent_child.iter()
     }
 
+    pub async fn get_node(&self, id: String) -> Option<RoomRelation> {
+        if let Ok(hash) = base64::decode(id.clone()) {
+            let room_hash_bytes = GraphDb::fix_size(hash.as_ref());
+            let room_hash = u128::from_le_bytes(room_hash_bytes);
+            let room_id_bytes = self.get_room_id_from_hash(&room_hash);
+            if let Some(room_id_bytes) = room_id_bytes {
+                let room_id = std::str::from_utf8(room_id_bytes.as_ref()).unwrap_or_default();
+                if let Some(relation) = self.generate_room_relation(id.clone(), room_id).await {
+                    if relation.name == "MTRNord" || id == "4u98GV1CGlCn6PvxBerjrw==" {
+                        return None;
+                    }
+                    return Some(relation);
+                }
+            }
+        }
+        None
+    }
+    fn fix_size(raw: &[u8]) -> [u8; 16] {
+        raw.try_into().expect("slice with incorrect length")
+    }
+
     pub async fn get_json_relations(&self) -> RelationsJson {
         //TODO use HashSet for performance and reuse the already existing hashes
         let mut nodes = BTreeSet::new();
         let mut all_links = BTreeSet::new();
 
-        fn fix_size(raw: &[u8]) -> [u8; 16] {
-            raw.try_into().expect("slice with incorrect length")
-        }
-
         let room_id_relations: RelationsMix = self
             .get_all_parent_child()
             .filter_map(|s| s.ok())
             .map(|(key, val)| {
-                let parent_hash = fix_size(key.as_ref());
+                let parent_hash = GraphDb::fix_size(key.as_ref());
                 let child_hashes: BTreeSet<u128> = bincode::deserialize(val.as_ref()).unwrap();
                 let parent_hash = u128::from_le_bytes(parent_hash);
 
                 let parent = self.get_room_id_from_hash(&parent_hash);
-
+                let parent_hash = base64::encode(parent_hash.to_le_bytes());
                 ((parent_hash, parent), child_hashes)
             })
             .map(|((parent_hash, parent_bytes), child_hashes)| {
@@ -249,8 +277,6 @@ impl GraphDb {
             .collect();
 
         for ((parent_hash, parent), child_hashes) in room_id_relations {
-            let parent_hash = base64::encode(parent_hash.to_le_bytes());
-
             if let Some(relation) = self
                 .generate_room_relation(parent_hash.clone(), &parent)
                 .await
@@ -270,6 +296,7 @@ impl GraphDb {
                 }
                 all_links.extend(links.into_iter());
 
+                // TODO Use tokio channel to allow streaming of nodes
                 // Add the parent
                 nodes.insert(relation);
             }
@@ -287,7 +314,7 @@ impl GraphDb {
         // Add missing childs
         for link in &missing_child_nodes_links {
             if let Ok(hash) = base64::decode(link.target.clone()) {
-                let room_hash_bytes = fix_size(hash.as_ref());
+                let room_hash_bytes = GraphDb::fix_size(hash.as_ref());
                 let room_hash = u128::from_le_bytes(room_hash_bytes);
                 let room_id_bytes = self.get_room_id_from_hash(&room_hash);
                 if let Some(room_id_bytes) = room_id_bytes {
@@ -323,9 +350,9 @@ impl GraphDb {
                     .count();
                 let incoming_links = all_links.iter().filter(|x| x.target == node.id).count();
                 let outgoing_links = all_links.iter().filter(|x| x.source == node.id).count();
-                node.weight = Some(links);
-                node.incoming_links = Some(incoming_links);
-                node.outgoing_links = Some(outgoing_links);
+                node.weight = Some(links.try_into().unwrap());
+                node.incoming_links = Some(incoming_links.try_into().unwrap());
+                node.outgoing_links = Some(outgoing_links.try_into().unwrap());
                 node
             })
             .collect();
@@ -374,6 +401,11 @@ impl GraphDb {
                 } else {
                     "".into()
                 };
+                let members = if let Ok(members) = room.joined_members().await {
+                    members.len()
+                } else {
+                    0
+                };
                 return Some(RoomRelation {
                     id: room_hash,
                     name,
@@ -385,42 +417,10 @@ impl GraphDb {
                     outgoing_links: None,
                     room_id: room_id.into(),
                     is_space: room.is_space(),
+                    members: members.try_into().unwrap(),
                 });
             }
         }
         None
     }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct RelationsJson {
-    pub nodes: BTreeSet<RoomRelation>,
-    pub links: BTreeSet<Link>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SSEJson {
-    pub node: RoomRelation,
-    pub link: Link,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Ord, Eq, PartialOrd, Hash)]
-pub struct Link {
-    pub source: String,
-    pub target: String,
-    pub value: i64,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Ord, Eq, PartialOrd, Hash)]
-pub struct RoomRelation {
-    pub id: String,
-    pub room_id: String,
-    pub name: String,
-    pub alias: String,
-    pub avatar: String,
-    pub topic: String,
-    pub weight: Option<usize>,
-    pub incoming_links: Option<usize>,
-    pub outgoing_links: Option<usize>,
-    pub is_space: bool,
 }

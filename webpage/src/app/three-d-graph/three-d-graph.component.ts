@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, HostListener, OnInit, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import ForceGraph3D, {
   ForceGraph3DInstance
 } from "3d-force-graph";
@@ -13,7 +13,7 @@ import { Vector2 } from 'three';
   templateUrl: './three-d-graph.component.html',
   styleUrls: ['./three-d-graph.component.scss']
 })
-export class ThreeDGraphComponent implements AfterViewInit {
+export class ThreeDGraphComponent implements AfterViewInit, OnDestroy {
   @ViewChild('graph')
   graph_element!: ElementRef<any>;
 
@@ -39,6 +39,11 @@ export class ThreeDGraphComponent implements AfterViewInit {
   first: boolean = true;
 
   constructor(private api: ApiService) { }
+  ngOnDestroy(): void {
+    if (this.graph != null) {
+      this.graph._destructor();
+    }
+  }
 
   setupGraph() {
     this.sidebar.nativeElement.addEventListener('animationend', (e: { preventDefault: () => void; }) => {
@@ -74,7 +79,8 @@ export class ThreeDGraphComponent implements AfterViewInit {
       if (node.alias !== "") {
         this.link.nativeElement.style.setProperty('display', 'inline');
         this.alias_link = node.alias;
-        this.alias_link_href = `https://matrix.to/#/${encodeURIComponent(node.alias)}`;
+        const alias_server = node.alias.split(":")[1];
+        this.alias_link_href = `https://matrix.to/#/${encodeURIComponent(node.alias)}?via=${alias_server}&via=matrix.org`;
       }
     })
 

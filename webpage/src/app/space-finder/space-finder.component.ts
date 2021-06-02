@@ -17,7 +17,7 @@ export class SpaceFinderComponent implements OnInit {
   filterColumn = 'name';
   rows: Row[] = [];
   temp: Row[] = [];
-  columns = [{ prop: 'name', name: 'Roomname' }, { name: 'Alias' }, { prop: 'room_id', name: 'Room ID' }, { prop: 'incoming_links', name: 'Incoming Links' }];
+  columns = [{ prop: 'name', name: 'Roomname' }, { name: 'Alias' }, { prop: 'room_id', name: 'Room ID' }, { prop: 'members', name: 'Member Count' }, { prop: 'incoming_links', name: 'Incoming Links' }];
   ColumnMode = ColumnMode;
   first = true;
 
@@ -35,7 +35,8 @@ export class SpaceFinderComponent implements OnInit {
           this.rows = nodes;
           this.rows = this.rows.map(data => {
             if (data.updated === false || data.updated == null) {
-              data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+              const alias_server = data.alias.split(":")[1];
+              data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
               data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
               data.updated = true;
             }
@@ -59,7 +60,8 @@ export class SpaceFinderComponent implements OnInit {
           });
           this.rows = this.rows.map(data => {
             if (data.updated === false || data.updated == null) {
-              data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+              const alias_server = data.alias.split(":")[1];
+              data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
               data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
               data.updated = true;
             }
@@ -102,7 +104,8 @@ export class SpaceFinderComponent implements OnInit {
       if (this.temp != null) {
         this.rows = this.temp.map(data => {
           if (data.updated === false || data.updated == null) {
-            data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+            const alias_server = data.alias.split(":")[1];
+            data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
             data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
             data.updated = true;
           }
@@ -124,7 +127,8 @@ export class SpaceFinderComponent implements OnInit {
     // update the rows
     this.rows = temp.map(data => {
       if (data.updated === false || data.updated == null) {
-        data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+        const alias_server = data.alias.split(":")[1];
+        data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
         data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
         data.updated = true;
       }

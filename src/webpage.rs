@@ -6,6 +6,7 @@ use askama_actix::{Template, TemplateToResponse};
 use mime_guess::from_path;
 use rust_embed::RustEmbed;
 
+pub mod api;
 pub mod ws;
 
 #[derive(Template)]

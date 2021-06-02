@@ -33,7 +33,8 @@ export class LinkFinderComponent implements OnInit {
         this.rows = this.api.data.nodes;
         this.rows = this.rows.filter(node => this.links.some(value => node["id"] === value["target"])).map(data => {
           if (data.updated === false || data.updated == null) {
-            data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+            const alias_server = data.alias.split(":")[1];
+            data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
             data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
             data.updated = true;
           }
@@ -51,7 +52,8 @@ export class LinkFinderComponent implements OnInit {
           this.rows = nodes;
           this.rows = this.rows.filter(node => this.links.some(value => node["id"] === value["target"])).map(data => {
             if (data.updated === false || data.updated == null) {
-              data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+              const alias_server = data.alias.split(":")[1];
+              data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
               data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
               data.updated = true;
             }
@@ -93,7 +95,8 @@ export class LinkFinderComponent implements OnInit {
       if (this.api.data != null) {
         const nodes = this.api.data.nodes.map(data => {
           if (data.updated === false || data.updated == null) {
-            data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+            const alias_server = data.alias.split(":")[1];
+            data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
             data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
             data.updated = true;
           }
@@ -118,7 +121,8 @@ export class LinkFinderComponent implements OnInit {
       const links = this.links.filter(link => link["target"] === room_hash);
       this.rows = this.temp.filter(node => links.some(value => node["id"] === value["source"])).map(data => {
         if (data.updated === false || data.updated == null) {
-          data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+          const alias_server = data.alias.split(":")[1];
+          data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
           data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
           data.updated = true;
         }
@@ -128,7 +132,8 @@ export class LinkFinderComponent implements OnInit {
       const links = this.links.filter(link => link["source"] === room_hash);
       this.rows = this.temp.filter(node => links.some(value => node["id"] === value["target"])).map(data => {
         if (data.updated === false || data.updated == null) {
-          data.alias = `<a href="https://matrix.to/#/${data.alias}">${data.alias}</a>`;
+          const alias_server = data.alias.split(":")[1];
+          data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
           data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
           data.updated = true;
         }

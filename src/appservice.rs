@@ -4,9 +4,8 @@ use matrix_sdk::{
     api::r0::config::get_global_account_data::Request as GlobalAccountDataGetRequest,
     api::r0::config::set_global_account_data::Request as GlobalAccountDataSetRequest,
     api::r0::{
-        filter::{FilterDefinition, LazyLoadOptions, RoomEventFilter, RoomFilter},
+        filter::RoomEventFilter,
         message::get_message_events::{Direction, Request as MessagesRequest},
-        sync::sync_events::Filter,
     },
     assign, async_trait,
     events::{
@@ -15,11 +14,12 @@ use matrix_sdk::{
             member::{MemberEventContent, MembershipState},
             message::{MessageEventContent, MessageType, TextMessageEventContent},
         },
-        AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, SyncMessageEvent, SyncStateEvent,
+        AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, StrippedStateEvent,
+        SyncMessageEvent,
     },
-    identifiers::{EventId, RoomIdOrAliasId, ServerName, ServerNameBox, UserId},
+    identifiers::{EventId, RoomIdOrAliasId, ServerName, UserId},
     room::{Joined, Room},
-    uint, Client, EventHandler, LoopCtrl, Raw, SyncSettings,
+    uint, Client, EventHandler, Raw,
 };
 use matrix_sdk_appservice::{Appservice, AppserviceRegistration};
 use once_cell::sync::Lazy;
@@ -27,6 +27,7 @@ use regex::Regex;
 use std::{collections::BTreeMap, convert::TryFrom, time::Duration};
 use tokio::time::sleep;
 use tracing::{error, info};
+// use matrix_sdk::events::SyncStateEvent;
 
 pub async fn generate_appservice(config: &Config<'_>) -> Appservice {
     let homeserver_url = &config.bot.homeserver_url;
@@ -37,7 +38,14 @@ pub async fn generate_appservice(config: &Config<'_>) -> Appservice {
         .await
         .unwrap();
 
-    /*let client = appservice.client(Some("server_stats")).await;
+    /*use matrix_sdk::{
+        api::r0::{
+            filter::{FilterDefinition, LazyLoadOptions, RoomFilter},
+            sync::sync_events::Filter,
+        },
+        LoopCtrl, SyncSettings,
+    };
+    let client = appservice.client(Some("server_stats")).await;
     tokio::spawn(async move {
         let mut filter = FilterDefinition::default();
         let mut room_filter = RoomFilter::default();
@@ -104,7 +112,7 @@ impl VoyagerBot {
     async fn set_direct(
         client: Client,
         room: Room,
-        room_member: &SyncStateEvent<MemberEventContent>,
+        room_member: &StrippedStateEvent<MemberEventContent>,
     ) {
         if let Some(is_direct) = room_member.content.is_direct {
             if is_direct {
@@ -201,7 +209,13 @@ impl VoyagerBot {
 
     async fn search_new_room(client: Client, room_alias: String, parent_room: Joined) {
         // Workaround for: https://github.com/matrix-org/synapse/issues/10021
-        if room_alias == "#emacs:matrix.org" {
+        if room_alias == "#emacs:matrix.org"
+            || room_alias == "!TEwfEWdDwdaFazXmwD:matrix.org"
+            || room_alias == "#nextcloud_:matrix.org"
+            || room_alias == "#Nextcloud:matrix.org"
+            || room_alias == "#NEXTCLOUD:matrix.org"
+            || room_alias == "#NextCloud:matrix.org"
+        {
             return;
         }
 
@@ -450,10 +464,16 @@ impl VoyagerBot {
 
 #[async_trait]
 impl EventHandler for VoyagerBot {
-    async fn on_room_member(&self, room: Room, event: &SyncStateEvent<MemberEventContent>) {
-        if !&event.state_key.contains("server_stats") {
+    async fn on_stripped_state_member(
+        &self,
+        room: Room,
+        event: &StrippedStateEvent<MemberEventContent>,
+        _: Option<MemberEventContent>,
+    ) {
+        if !&event.state_key.contains("@server_stats:nordgedanken.dev") {
             return;
         }
+        info!("Got invite");
 
         if let MembershipState::Invite = event.content.membership {
             let client = self.appservice.client(Some("server_stats")).await;
@@ -462,6 +482,20 @@ impl EventHandler for VoyagerBot {
             info!("Successfully joined room {}", room.room_id());
         };
     }
+
+    /*async fn on_room_member(&self, room: Room, event: &SyncStateEvent<MemberEventContent>) {
+        if !&event.state_key.contains("@server_stats:nordgedanken.dev") {
+            return;
+        }
+        info!("Got invite");
+
+        if let MembershipState::Invite = event.content.membership {
+            let client = self.appservice.client(Some("server_stats")).await;
+            client.join_room_by_id(room.room_id()).await.unwrap();
+            VoyagerBot::set_direct(client, room.clone(), event).await;
+            info!("Successfully joined room {}", room.room_id());
+        };
+    }*/
 
     async fn on_room_message(&self, room: Room, event: &SyncMessageEvent<MessageEventContent>) {
         if let Room::Joined(room) = room {

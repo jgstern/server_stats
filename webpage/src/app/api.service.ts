@@ -9,6 +9,7 @@ export interface Row {
   alias: string;
   avatar: string;
   topic: string;
+  members: number;
   weight: string;
   is_space: boolean;
   updated?: boolean;
