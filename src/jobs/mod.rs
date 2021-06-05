@@ -4,18 +4,24 @@ use futures::stream::{self, StreamExt};
 use sqlx::PgPool;
 use tracing::{error, info};
 
-pub async fn find_servers(pool: &PgPool) -> color_eyre::Result<()> {
+use crate::{config::Config, database::cache::CacheDb, scraping::InfluxDb};
+
+pub async fn find_servers(
+    pool: &PgPool,
+    cache: &CacheDb,
+    config: &Config,
+) -> color_eyre::Result<()> {
     info!("Started find_servers task");
 
-    crate::matrix::fetch_servers_from_db(pool).await?;
+    crate::matrix::fetch_servers_from_db(pool, config, cache).await?;
     info!("Finished find_servers task");
     Ok(())
 }
 
-pub async fn update_versions() -> color_eyre::Result<()> {
+pub async fn update_versions(cache: &CacheDb, influx_db: InfluxDb) -> color_eyre::Result<()> {
     info!("Started update_versions task");
 
-    let servers = crate::CACHE_DB.get_all_servers();
+    let servers = cache.get_all_servers();
     let stream = stream::iter(servers);
 
     let client = reqwest::ClientBuilder::new()
@@ -32,14 +38,16 @@ pub async fn update_versions() -> color_eyre::Result<()> {
             server_address
         })
         .for_each_concurrent(None, |server_address| async {
-            if let Err(e) = crate::matrix::get_server_version(&server_address.await, &client).await
+            if let Err(e) =
+                crate::matrix::get_server_version(&server_address.await, &client, &cache.clone())
+                    .await
             {
                 error!("Failed to get version: {}", e);
             };
         })
         .await;
     info!("Pushing updated versions");
-    crate::INFLUX_CLIENT.push_versions().await?;
+    influx_db.push_versions(&cache).await?;
     info!("Finished update_versions task");
     Ok(())
 }

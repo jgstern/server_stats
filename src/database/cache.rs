@@ -1,19 +1,35 @@
+use std::sync::Arc;
+
 use color_eyre::Result;
 use sled::IVec;
+use tokio::sync::watch::Sender;
 
 use crate::database::graph::GraphDb;
 use crate::matrix::MatrixVersionServer;
+use crate::webpage::api::SSEJson;
 use tracing::{error, info};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CacheDb {
-    db: sled::Db,
-    pub graph: GraphDb,
+    db: Arc<sled::Db>,
+    pub graph: Arc<GraphDb>,
 }
 
 impl CacheDb {
-    pub fn new() -> Self {
-        CacheDb::default()
+    pub fn new(tx: Sender<Option<SSEJson>>) -> Self {
+        info!("Created new db");
+        let db = sled::Config::default()
+            .path("./storage/cache".to_owned())
+            .use_compression(true)
+            .open()
+            .unwrap();
+        let hash_map = db.open_tree(b"hash_map").unwrap();
+        let state = db.open_tree(b"state").unwrap();
+        let parent_child = db.open_tree(b"parent_child").unwrap();
+        let child_parent = db.open_tree(b"child_parent").unwrap();
+        let graph = Arc::new(GraphDb::new(hash_map, state, parent_child, child_parent,tx));
+        let db = Arc::new(db);
+        CacheDb { db, graph }
     }
 
     pub fn set_server_address(&self, server_name: &str, server_address: String) -> Result<()> {
@@ -86,22 +102,5 @@ impl CacheDb {
         let prefix: &[u8] = b"address/";
         let r = self.db.scan_prefix(prefix);
         r.keys()
-    }
-}
-
-impl Default for CacheDb {
-    fn default() -> Self {
-        info!("Created new db");
-        let db = sled::Config::default()
-            .path("./storage/cache".to_owned())
-            .use_compression(true)
-            .open()
-            .unwrap();
-        let hash_map = db.open_tree(b"hash_map").unwrap();
-        let state = db.open_tree(b"state").unwrap();
-        let parent_child = db.open_tree(b"parent_child").unwrap();
-        let child_parent = db.open_tree(b"child_parent").unwrap();
-        let graph = GraphDb::new(hash_map, state, parent_child, child_parent);
-        CacheDb { db, graph }
     }
 }

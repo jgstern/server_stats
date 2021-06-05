@@ -1,4 +1,4 @@
-use crate::errors::Errors;
+use crate::{config::Config, database::cache::CacheDb, errors::Errors};
 use color_eyre::eyre::Result;
 use futures::TryStreamExt;
 use reqwest::StatusCode;
@@ -13,8 +13,7 @@ struct DestinationKey {
     destination: String,
 }
 
-pub async fn fetch_servers_from_db(pool: &PgPool) -> Result<()> {
-    let config = crate::CONFIG.get().expect("unable to get config");
+pub async fn fetch_servers_from_db(pool: &PgPool, config: &Config, cache: &CacheDb) -> Result<()> {
     let postgres_query = config.postgres.query.as_ref();
     let rows = sqlx::query_as::<_, DestinationKey>(postgres_query)
         .fetch(pool)
@@ -23,14 +22,14 @@ pub async fn fetch_servers_from_db(pool: &PgPool) -> Result<()> {
     if let Err(e) = rows
         .try_for_each_concurrent(None, |row| async move {
             {
-                if crate::CACHE_DB.contains_server(&row.destination) {
+                if cache.contains_server(&row.destination) {
                     return Ok(());
                 }
             }
             let server_url = crate::matrix::discover::resolve_server_name(&row.destination).await;
 
             if let Ok(ref server_url) = server_url {
-                crate::CACHE_DB
+                cache
                     .set_server_address(&row.destination, server_url.to_string())
                     .expect("Unable to write to sled");
             }
@@ -43,8 +42,12 @@ pub async fn fetch_servers_from_db(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
-pub async fn get_server_version(server_name: &str, client: &reqwest::Client) -> Result<()> {
-    let address = crate::CACHE_DB.get_server_address(server_name);
+pub async fn get_server_version(
+    server_name: &str,
+    client: &reqwest::Client,
+    cache: &CacheDb,
+) -> Result<()> {
+    let address = cache.get_server_address(server_name);
     if let Some(address) = address {
         let address = String::from_utf8_lossy(address.as_ref());
 
@@ -64,7 +67,7 @@ pub async fn get_server_version(server_name: &str, client: &reqwest::Client) -> 
                         server_name, body.server.name, body.server.version
                     );
                     {
-                        crate::CACHE_DB.set_server_version(server_name, body.server)?;
+                        cache.set_server_version(server_name, body.server)?;
                     }
                 }
             }

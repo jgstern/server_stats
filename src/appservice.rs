@@ -1,4 +1,4 @@
-use crate::{config::Config, MESSAGES_SEMPAHORE};
+use crate::{config::Config, database::cache::CacheDb, MESSAGES_SEMPAHORE};
 use chrono::{prelude::*, Duration as ChronoDuration};
 use matrix_sdk::{
     api::r0::config::get_global_account_data::Request as GlobalAccountDataGetRequest,
@@ -29,12 +29,12 @@ use tokio::time::sleep;
 use tracing::{error, info};
 // use matrix_sdk::events::SyncStateEvent;
 
-pub async fn generate_appservice(config: &Config<'_>) -> Appservice {
-    let homeserver_url = &config.bot.homeserver_url;
-    let server_name = &config.bot.server_name;
+pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice {
+    let homeserver_url = config.bot.clone().homeserver_url;
+    let server_name = config.bot.clone().server_name;
     let registration = AppserviceRegistration::try_from_yaml_file("./registration.yaml").unwrap();
 
-    let appservice = Appservice::new(homeserver_url.as_ref(), server_name.as_ref(), registration)
+    let appservice = Appservice::new(homeserver_url.as_str(), server_name.as_str(), registration)
         .await
         .unwrap();
 
@@ -79,12 +79,19 @@ pub async fn generate_appservice(config: &Config<'_>) -> Appservice {
             .await;
         info!("Finished Sync");
     });*/
-    let client = appservice.client(Some("server_stats")).await;
+
+    let client = appservice
+        .virtual_user_client("server_stats")
+        .await
+        .unwrap();
     crate::MATRIX_CLIENT.set(client);
 
-    let event_handler = VoyagerBot::new(appservice.clone());
+    let event_handler = VoyagerBot::new(appservice.clone(), cache, config.clone());
 
-    let client = appservice.client(Some("server_stats")).await;
+    let client = appservice
+        .virtual_user_client("server_stats")
+        .await
+        .unwrap();
     client.set_event_handler(Box::new(event_handler)).await;
 
     appservice
@@ -102,11 +109,17 @@ static REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"[#!][a-zA-Z0-9.\-_#=]+:[a-zA-Z0-9.\-_]+[a-zA-Z0-9]").unwrap());
 struct VoyagerBot {
     appservice: Appservice,
+    cache: CacheDb,
+    config: Config,
 }
 
 impl VoyagerBot {
-    pub fn new(appservice: Appservice) -> Self {
-        Self { appservice }
+    pub fn new(appservice: Appservice, cache: CacheDb, config: Config) -> Self {
+        Self {
+            appservice,
+            cache,
+            config,
+        }
     }
 
     async fn set_direct(
@@ -180,6 +193,8 @@ impl VoyagerBot {
 
     #[async_recursion::async_recursion]
     async fn process_message(
+        config: Config,
+        cache: CacheDb,
         client: Client,
         msg_body: &str,
         room: Joined,
@@ -190,24 +205,36 @@ impl VoyagerBot {
             return;
         }
 
-        // If there is a match mark the event as read to indicate it worked
-        if let Some(event_id) = event_id {
-            if let Err(e) = room.read_marker(&event_id, Some(&event_id)).await {
-                error!("Can't send read marker event: {}", e);
-            };
-        };
-
         // Iterate over aliases
         for cap in REGEX.captures_iter(&msg_body) {
             let room_alias = cap[0].to_string();
 
             let client = client.clone();
             let room = room.clone();
-            tokio::spawn(VoyagerBot::search_new_room(client, room_alias, room));
+            tokio::spawn(VoyagerBot::search_new_room(
+                config.clone(),
+                cache.clone(),
+                client,
+                room_alias,
+                room,
+            ));
         }
+
+        // If there is a match mark the event as read to indicate it worked
+        if let Some(event_id) = event_id {
+            if let Err(e) = room.read_marker(&event_id, Some(&event_id)).await {
+                error!("Can't send read marker event: {}", e);
+            };
+        };
     }
 
-    async fn search_new_room(client: Client, room_alias: String, parent_room: Joined) {
+    async fn search_new_room(
+        config: Config,
+        cache: CacheDb,
+        client: Client,
+        room_alias: String,
+        parent_room: Joined,
+    ) {
         // Workaround for: https://github.com/matrix-org/synapse/issues/10021
         if room_alias == "#emacs:matrix.org"
             || room_alias == "!TEwfEWdDwdaFazXmwD:matrix.org"
@@ -237,7 +264,7 @@ impl VoyagerBot {
         let room_id = room.room_id();
 
         // Save room to db
-        if VoyagerBot::save_to_db(room_alias, room_id.as_str(), parent_room).await {
+        if VoyagerBot::save_to_db(&cache, room_alias, room_id.as_str(), parent_room).await {
             return;
         }
 
@@ -281,8 +308,12 @@ impl VoyagerBot {
                                 // Make sure we explicitly do not want to wait on this
                                 {
                                     let parent_room = room.clone();
+                                    let cache = cache.clone();
+                                    let config = config.clone();
                                     tokio::spawn(async move {
                                         VoyagerBot::process_message(
+                                            config,
+                                            cache,
                                             client,
                                             &text_content.body,
                                             parent_room,
@@ -325,7 +356,7 @@ impl VoyagerBot {
                         failed = true;
                     }
                 }
-                if let Err(e) = VoyagerBot::cleanup(room_id.to_string()).await {
+                if let Err(e) = VoyagerBot::cleanup(room_id.to_string(), &config).await {
                     error!("failed to clean: {}", e);
                 };
             }
@@ -338,7 +369,7 @@ impl VoyagerBot {
     }
 
     pub async fn try_join(client: Client, room_alias: &str, tries: i32) -> Option<Joined> {
-        if tries > 0 {
+        if tries >= 0 {
             // Check if we already knew the room and exit early if it is the case
             let already_joined_room_id = client
                 .joined_rooms()
@@ -388,7 +419,12 @@ impl VoyagerBot {
     }
 
     /// Returns true if we want to exit early
-    async fn save_to_db(room_alias: String, room_id: &str, parent_room: Joined) -> bool {
+    async fn save_to_db(
+        cache: &CacheDb,
+        room_alias: String,
+        room_id: &str,
+        parent_room: Joined,
+    ) -> bool {
         // Get parent Data
         let parent_id = parent_room.room_id().as_str();
         let parent_displayname = parent_room.display_name().await;
@@ -397,23 +433,23 @@ impl VoyagerBot {
             return true;
         }
         // Check if we know the child already
-        if crate::CACHE_DB.graph.knows_room(room_id) {
+        if cache.graph.knows_room(room_id) {
             // Check if the parent was known for this child already
-            let parents = crate::CACHE_DB.graph.get_parent(room_id);
+            let parents = cache.graph.get_parent(room_id);
             if !parents.iter().any(|x| x.as_ref() == parent_id) {
                 // If it is not already known as a parent
                 info!(
                     "New room relation for already known room: {:?} -> {}",
                     parent_displayname, room_alias
                 );
-                if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id).await {
+                if let Err(e) = cache.graph.add_child(parent_id, room_id).await {
                     error!("failed to save child: {}", e);
                 };
             }
             return true;
         } else {
             // Save it as it is a new relation
-            if let Err(e) = crate::CACHE_DB.graph.add_child(parent_id, room_id).await {
+            if let Err(e) = cache.graph.add_child(parent_id, room_id).await {
                 error!("failed to save child: {}", e);
             };
 
@@ -426,7 +462,7 @@ impl VoyagerBot {
     }
 
     /// Calls the purge_history API at synapse to cleanup rooms
-    async fn cleanup(room_id: String) -> color_eyre::Result<()> {
+    async fn cleanup(room_id: String, config: &Config) -> color_eyre::Result<()> {
         let now = Utc::now();
         let time = now - ChronoDuration::days(2);
         let timestamp = time.timestamp_millis();
@@ -434,12 +470,9 @@ impl VoyagerBot {
             .timeout(std::time::Duration::from_secs(30))
             .build()?;
 
-        let server_address = &crate::CONFIG.get().unwrap().bot.homeserver_url;
+        let server_address = &config.bot.homeserver_url;
         let map = serde_json::json!({"delete_local_events": false, "purge_up_to_ts":timestamp});
-        let auth_header = format!(
-            "Bearer {}",
-            crate::CONFIG.get().unwrap().bot.admin_access_token
-        );
+        let auth_header = format!("Bearer {}", config.bot.admin_access_token);
         let url = format!(
             "{}/_synapse/admin/v1/purge_history/{}",
             server_address, room_id
@@ -476,7 +509,11 @@ impl EventHandler for VoyagerBot {
         info!("Got invite");
 
         if let MembershipState::Invite = event.content.membership {
-            let client = self.appservice.client(Some("server_stats")).await;
+            let client = self
+                .appservice
+                .virtual_user_client("server_stats")
+                .await
+                .unwrap();
             client.join_room_by_id(room.room_id()).await.unwrap();
             VoyagerBot::set_direct(client, room.clone(), event).await;
             info!("Successfully joined room {}", room.room_id());
@@ -540,9 +577,16 @@ impl EventHandler for VoyagerBot {
             }
 
             // Handle message
-            let client = self.appservice.client(Some("server_stats")).await;
+            let client = self
+                .appservice
+                .virtual_user_client("server_stats")
+                .await
+                .unwrap();
+            let cache = self.cache.clone();
+            let config = self.config.clone();
             tokio::spawn(async move {
-                VoyagerBot::process_message(client, &msg_body, room, Some(event_id)).await;
+                VoyagerBot::process_message(config, cache, client, &msg_body, room, Some(event_id))
+                    .await;
             });
         };
     }

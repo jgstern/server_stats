@@ -18,6 +18,7 @@ import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzSelectModule } from 'ng-zorro-antd/select';
 import { NzTypographyModule } from 'ng-zorro-antd/typography';
+import { NzAlertModule } from 'ng-zorro-antd/alert';
 import { LinkFinderComponent } from './link-finder/link-finder.component';
 import { RoomListComponent } from './room-list/room-list.component';
 import { LinkyModule } from 'ngx-linky';
@@ -50,7 +51,8 @@ registerLocaleData(en);
     NzIconModule,
     NzSelectModule,
     NzTypographyModule,
-    LinkyModule
+    LinkyModule,
+    NzAlertModule
   ],
   providers: [{ provide: NZ_I18N, useValue: en_US }],
   bootstrap: [AppComponent]

@@ -1,90 +1,72 @@
-use std::borrow::Cow;
-
-use actix_web::http::header::{CacheControl, CacheDirective};
-use actix_web::{body::Body, HttpRequest, HttpResponse, Result};
-use askama_actix::{Template, TemplateToResponse};
-use mime_guess::from_path;
-use rust_embed::RustEmbed;
+use crate::{
+    appservice::generate_appservice, config::Config, database::cache::CacheDb,
+    webpage::api::SSEJson,
+};
+use futures::{SinkExt, StreamExt};
+use std::{
+    convert::Infallible,
+    net::{IpAddr, SocketAddr},
+    str::FromStr,
+};
+use tokio::sync::watch::Receiver;
+use tracing::{error, info};
+use warp::{filters::BoxedFilter, ws::Message, Filter, Reply};
 
 pub mod api;
-pub mod ws;
 
-#[derive(Template)]
-#[template(path = "2d.html")]
-struct TwoDTemplate;
-
-#[derive(Template)]
-#[template(path = "vr.html")]
-struct VRTemplate;
-#[derive(Template)]
-#[template(path = "ar.html")]
-struct ARTemplate;
-
-pub async fn two_d_page() -> Result<HttpResponse> {
-    TwoDTemplate {}.to_response()
-}
-
-pub async fn vr_page() -> Result<HttpResponse> {
-    VRTemplate {}.to_response()
-}
-
-pub async fn ar_page() -> Result<HttpResponse> {
-    ARTemplate {}.to_response()
-}
-
-#[derive(RustEmbed)]
-#[folder = "assets"]
-struct Asset;
-
-#[derive(RustEmbed)]
-#[folder = "webpage/dist/server-stats"]
-struct Webpage;
-
-fn handle_embedded_assets_file(path: &str) -> HttpResponse {
-    match Asset::get(path) {
-        Some(content) => {
-            let body: Body = match content {
-                Cow::Borrowed(bytes) => bytes.into(),
-                Cow::Owned(bytes) => bytes.into(),
-            };
-            HttpResponse::Ok()
-                .insert_header(CacheControl(vec![CacheDirective::MaxAge(31536000u32)]))
-                .content_type(from_path(path).first_or_octet_stream().as_ref())
-                .body(body)
-        }
-        None => handle_embedded_file(&path.replace("/assets", "")),
+pub async fn run_server(config: &Config, cache: CacheDb, rx: Receiver<Option<SSEJson>>) {
+    info!("Starting appservice...");
+    let appservice = generate_appservice(&config, cache.clone()).await;
+    let addr = IpAddr::from_str(config.api.ip.as_ref());
+    let routes = warp::any()
+        .and(webpage(&config))
+        .or(websocket(rx.clone()))
+        .or(warp::path("relations").and_then(move || {
+            let cache = cache.clone();
+            async move { relations(cache.clone()).await }
+        }))
+        .or(appservice.warp_filter());
+    if let Ok(addr) = addr {
+        let socket_addr = SocketAddr::new(addr, config.api.port);
+        warp::serve(routes).run(socket_addr).await;
+    } else {
+        error!("Unable to start webserver: Invalid IP Address")
     }
 }
 
-pub async fn index_page() -> HttpResponse {
-    handle_embedded_file("index.html")
+fn websocket(broadcast_rx: Receiver<Option<SSEJson>>) -> BoxedFilter<(impl Reply,)> {
+    warp::path("ws")
+        // The `ws()` filter will prepare the Websocket handshake.
+        .and(warp::ws())
+        .map(move |ws: warp::ws::Ws| {
+            let mut broadcast_rx = broadcast_rx.clone();
+            // And then our closure will be called when it completes...
+            ws.on_upgrade(|websocket| {
+                // Just echo all messages back...
+                let (mut tx, _rx) = websocket.split();
+                async move {
+                    while broadcast_rx.changed().await.is_ok() {
+                        let json = (*broadcast_rx.borrow()).clone();
+                        if let Some(json) = json {
+                            let j = serde_json::to_string(&json).unwrap();
+                            if let Err(e) = tx.send(Message::text(j.clone())).await {
+                                error!("Failed to send via websocket: {:?}", e);
+                            }
+                        }
+                    }
+                }
+            })
+        })
+        .boxed()
 }
 
-fn handle_embedded_file(path: &str) -> HttpResponse {
-    match Webpage::get(path) {
-        Some(content) => {
-            let body: Body = match content {
-                Cow::Borrowed(bytes) => bytes.into(),
-                Cow::Owned(bytes) => bytes.into(),
-            };
-            HttpResponse::Ok()
-                .insert_header(CacheControl(vec![CacheDirective::MaxAge(31536000u32)]))
-                .content_type(from_path(path).first_or_octet_stream().as_ref())
-                .body(body)
-        }
-        None => HttpResponse::NotFound().body("404 Not Found"),
-    }
+fn webpage(config: &Config) -> BoxedFilter<(impl Reply,)> {
+    warp::path::end()
+        .and(warp::fs::dir(config.api.webpage_path.to_string()))
+        .boxed()
 }
 
-pub async fn assets(req: HttpRequest) -> HttpResponse {
-    let path: &str = req.match_info().query("filename");
-    handle_embedded_assets_file(path)
-}
-
-pub async fn webpage(req: HttpRequest) -> HttpResponse {
-    let path: &str = req.match_info().query("filename");
-    if path == "metrics" {
-        return HttpResponse::Ok().finish();
-    }
-    handle_embedded_file(path)
+async fn relations(cache: CacheDb) -> Result<impl Reply, Infallible> {
+    let relations = cache.graph.get_json_relations().await;
+    Ok(warp::reply::json(&relations))
 }

@@ -1,23 +1,6 @@
 #![deny(unsafe_code)]
 
-use crate::{
-    appservice::generate_appservice,
-    config::Config,
-    database::cache::CacheDb,
-    scraping::InfluxDb,
-    webpage::{
-        ar_page, assets, index_page, two_d_page, vr_page, webpage,
-        ws::{websocket, Ws},
-    },
-};
-use actix::Addr;
-use actix_web::{
-    get,
-    middleware::{Compress, Logger},
-    web::{self},
-    App, HttpResponse, HttpServer, Responder,
-};
-use actix_web_prom::PrometheusMetricsBuilder;
+use crate::{config::Config, database::cache::CacheDb, scraping::InfluxDb, webpage::run_server};
 use chrono::{prelude::*, Duration};
 use clap::Clap;
 use color_eyre::eyre::Result;
@@ -27,14 +10,9 @@ use matrix_sdk::{
     Client,
 };
 use once_cell::sync::{Lazy, OnceCell};
-use prometheus::{opts, register_gauge, Gauge, Registry};
 use sqlx::{postgres::PgPoolOptions, PgPool};
-use std::{
-    collections::{BTreeMap, HashMap},
-    convert::TryFrom,
-    sync::Arc,
-};
-use tokio::sync::{RwLock, Semaphore};
+use std::{collections::BTreeMap, convert::TryFrom, sync::Arc};
+use tokio::sync::{watch, Semaphore};
 use tokio::time::sleep;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing::{error, info};
@@ -55,24 +33,14 @@ struct Opts {
     config: String,
 }
 
-pub static CONFIG: OnceCell<Config> = OnceCell::new();
-pub static ROOMS_TOTAL_COUNTER: Lazy<Gauge> = Lazy::new(|| {
-    let opts = opts!("rooms_total", "Rooms statistics").namespace("server_stats");
-    register_gauge!(opts).unwrap()
-});
-pub static WEBSOCKET_CLIENTS: Lazy<RwLock<HashMap<String, Addr<Ws>>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
 pub static MATRIX_CLIENT: OnceCell<Client> = OnceCell::new();
 pub static PG_POOL: OnceCell<PgPool> = OnceCell::new();
-pub static CACHE_DB: Lazy<CacheDb> = Lazy::new(CacheDb::new);
 pub static MESSAGES_SEMPAHORE: Lazy<Arc<Semaphore>> = Lazy::new(|| Arc::new(Semaphore::new(50)));
 
 pub static APP_USER_AGENT: &str = concat!("MTRNord/", env!("CARGO_PKG_NAME"),);
 
-pub static INFLUX_CLIENT: Lazy<InfluxDb> = Lazy::new(InfluxDb::new);
-
 // Marks all rooms to have history purged
-async fn force_cleanup() -> Result<()> {
+async fn force_cleanup(cache: &CacheDb, config: &Config) -> Result<()> {
     let now = Utc::now();
     let time = now - Duration::days(2);
     let timestamp = time.timestamp_millis();
@@ -80,7 +48,7 @@ async fn force_cleanup() -> Result<()> {
         .timeout(std::time::Duration::from_secs(30))
         .build()?;
 
-    let room_ids: Vec<String> = CACHE_DB
+    let room_ids: Vec<String> = cache
         .graph
         .get_all_room_ids()
         .map(|val| {
@@ -91,12 +59,9 @@ async fn force_cleanup() -> Result<()> {
             room_id
         })
         .collect();
-    let server_address = &crate::CONFIG.get().unwrap().bot.homeserver_url;
+    let server_address = &config.bot.homeserver_url;
     let map = serde_json::json!({"delete_local_events": false, "purge_up_to_ts":timestamp});
-    let auth_header = format!(
-        "Bearer {}",
-        crate::CONFIG.get().unwrap().bot.admin_access_token
-    );
+    let auth_header = format!("Bearer {}", config.bot.admin_access_token);
 
     for room_id in room_ids {
         let url = format!(
@@ -119,14 +84,7 @@ async fn force_cleanup() -> Result<()> {
 
     Ok(())
 }
-
-#[get("/relations")]
-async fn relations() -> impl Responder {
-    let data = crate::CACHE_DB.graph.get_json_relations();
-    HttpResponse::Ok().json(data.await)
-}
-
-#[actix_web::main]
+#[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
 
@@ -140,8 +98,6 @@ async fn main() -> Result<()> {
         //.add_directive("matrix_sdk=info".parse()?)
         //.add_directive("matrix_sdk_base::client=off".parse()?)
         //.add_directive("matrix_sdk_appservice::actix::push_transactions=off".parse()?)
-        //.add_directive("actix_server=info".parse()?)
-        //.add_directive("actix_web=info".parse()?)
         .add_directive("rustls::session=off".parse()?);
 
     tracing_subscriber::fmt()
@@ -155,29 +111,24 @@ async fn main() -> Result<()> {
 
     info!("Loading Configs...");
     let config = Config::load(opts.config)?;
-    CONFIG.set(config);
 
-    if crate::CONFIG.get().unwrap().bot.force_cleanup {
-        force_cleanup().await?;
+    let (tx, rx) = watch::channel(None);
+    let cache = CacheDb::new(tx);
+
+    if config.bot.force_cleanup {
+        force_cleanup(&cache, &config).await?;
         return Ok(());
     }
 
     info!("Setting up prometheus...");
 
-    let registry = Registry::new();
-    registry
-        .register(Box::new(ROOMS_TOTAL_COUNTER.clone()))
-        .expect("Creating a prometheus registry");
-
-    let prometheus = PrometheusMetricsBuilder::new("api")
-        .registry(registry)
-        .endpoint("/metrics")
-        .build()
-        .unwrap();
-
+    let cloned_cache = cache.clone();
+    let cloned_config = config.clone();
     tokio::spawn(async move {
+        let influx_db = InfluxDb::new(&cloned_config);
+        let cache = cloned_cache.clone();
+        let config = cloned_config.clone();
         info!("Connecting to postgres...");
-        let config = crate::CONFIG.get().expect("unable to get config");
         let postgres_url = config.postgres.url.as_ref();
         let pool = PgPoolOptions::new()
             .max_connections(100)
@@ -185,11 +136,11 @@ async fn main() -> Result<()> {
             .await;
         if let Ok(pool) = pool {
             // Get servers once
-            if let Err(e) = crate::jobs::find_servers(&pool).await {
+            if let Err(e) = crate::jobs::find_servers(&pool, &cache, &config).await {
                 error!("Error servers: {}", e);
             }
 
-            if let Err(e) = crate::jobs::update_versions().await {
+            if let Err(e) = crate::jobs::update_versions(&cache, influx_db.clone()).await {
                 error!("Error versions: {}", e);
             }
 
@@ -197,42 +148,12 @@ async fn main() -> Result<()> {
             info!("Starting sheduler");
             PG_POOL.set(pool);
 
-            start_queue().await.unwrap();
+            start_queue(cache, influx_db, config.clone()).await.unwrap();
         };
     });
 
-    info!("Starting appservice...");
-    let config = crate::CONFIG.get().expect("unable to get config");
-
-    let appservice = generate_appservice(&config).await;
-
     info!("Starting webserver...");
-    if let Err(e) = HttpServer::new(move || {
-        App::new()
-            .wrap(Logger::default())
-            .service(web::resource("/ws").to(websocket))
-            .wrap(prometheus.clone())
-            .wrap(Compress::default())
-            .service(web::resource("/health").to(|| actix_web::HttpResponse::Ok().finish()))
-            .service(web::resource("/").to(index_page))
-            .service(web::resource("/3d").to(index_page))
-            .service(web::resource("/faq").to(index_page))
-            .service(web::resource("/links").to(index_page))
-            .service(web::resource("/spaces").to(index_page))
-            .service(web::resource("/2d").to(two_d_page))
-            .service(web::resource("/vr").to(vr_page))
-            .service(web::resource("/ar").to(ar_page))
-            .route("/assets/{filename:.*}", web::get().to(assets))
-            .service(relations)
-            .service(appservice.actix_service())
-            .route("/{filename:.*}", web::get().to(webpage))
-    })
-    .bind((config.api.ip.to_string(), config.api.port))?
-    .run()
-    .await
-    {
-        error!("Failed to start webserver because: {}", e);
-    }
+    run_server(&config, cache, rx).await;
 
     if let Some(pool) = PG_POOL.get() {
         pool.close().await;
@@ -240,15 +161,24 @@ async fn main() -> Result<()> {
     std::process::exit(0);
 }
 
-async fn start_queue() -> Result<()> {
+async fn start_queue(cache: CacheDb, influx_db: InfluxDb, config: Config) -> Result<()> {
     let mut sched = JobScheduler::new();
 
+    let cache_two = cache.clone();
     sched
         .add(
             //Should be */30
-            Job::new("0 */30 * * * *", |_, _| {
-                tokio::spawn(async {
-                    if let Err(e) = crate::jobs::find_servers(&PG_POOL.get().unwrap()).await {
+            Job::new("0 */30 * * * *", move |_, _| {
+                let cache = cache_two.clone();
+                let config = config.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = crate::jobs::find_servers(
+                        &PG_POOL.get().unwrap(),
+                        &cache.clone(),
+                        &config.clone(),
+                    )
+                    .await
+                    {
                         error!("Error: {}", e);
                     }
                 });
@@ -257,12 +187,17 @@ async fn start_queue() -> Result<()> {
         )
         .expect("failed to shedule job");
 
+    let cache_three = cache.clone();
     sched
         .add(
             //Should be 5m
-            Job::new("0 */5 * * * *", |_, _| {
+            Job::new("0 */5 * * * *", move |_, _| {
+                let cache = cache_three.clone();
+                let influx_db = influx_db.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = crate::jobs::update_versions().await {
+                    if let Err(e) =
+                        crate::jobs::update_versions(&cache.clone(), influx_db.clone()).await
+                    {
                         error!("Error: {}", e);
                     }
                 });
@@ -281,8 +216,6 @@ async fn start_queue() -> Result<()> {
                         //TODO make sure to filter only banned ones here .iter().filter(|x|{x.})
                         let banned_rooms = client.left_rooms().len();
                         let total = joined_rooms + banned_rooms;
-                        crate::ROOMS_TOTAL_COUNTER.set(total as f64);
-                        assert_eq!(crate::ROOMS_TOTAL_COUNTER.get() as i64, total as i64);
                         //TODO allow configuration
                         let room = crate::MATRIX_CLIENT.get().unwrap().get_joined_room(
                             &RoomId::try_from("!zeFBFCASPaEUIHzbqj:nordgedanken.dev").unwrap(),

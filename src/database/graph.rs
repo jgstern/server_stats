@@ -1,10 +1,4 @@
-use crate::{
-    errors::Errors,
-    webpage::{
-        api::{Jsonline, Link, RelationsJson, RoomRelation, SSEJson},
-        ws::WsMessage,
-    },
-};
+use crate::webpage::api::{Link, RelationsJson, RoomRelation, SSEJson};
 use color_eyre::Result;
 use matrix_sdk::identifiers::RoomId;
 use sled::{IVec, Iter};
@@ -12,7 +6,9 @@ use std::{
     borrow::Cow,
     collections::BTreeSet,
     convert::{TryFrom, TryInto},
+    sync::Arc,
 };
+use tokio::sync::watch::Sender;
 use tracing::error;
 
 type RelationsMix = Vec<((String, String), BTreeSet<u128>)>;
@@ -23,6 +19,7 @@ pub struct GraphDb {
     state: sled::Tree,
     parent_child: sled::Tree,
     child_parent: sled::Tree,
+    websocket_tx: Sender<Option<SSEJson>>,
 }
 
 impl GraphDb {
@@ -31,14 +28,17 @@ impl GraphDb {
         state: sled::Tree,
         parent_child: sled::Tree,
         child_parent: sled::Tree,
+        tx: Sender<Option<SSEJson>>,
     ) -> Self {
         GraphDb {
             hash_map,
             state,
             parent_child,
             child_parent,
+            websocket_tx: tx,
         }
     }
+
     pub fn get_parent(&self, child: &str) -> Vec<Cow<str>> {
         let child_hash = GraphDb::hash(child);
         if let Ok(Some(parent)) = self.child_parent.get(child_hash.to_le_bytes()) {
@@ -138,7 +138,7 @@ impl GraphDb {
                     0
                 };
                 let sse_json = SSEJson {
-                    node: RoomRelation {
+                    node: Arc::new(RoomRelation {
                         id: base64::encode(child_hash.to_le_bytes()),
                         name,
                         alias,
@@ -150,19 +150,15 @@ impl GraphDb {
                         room_id: child.into(),
                         is_space: room.is_space(),
                         members: members.try_into().unwrap(),
-                    },
-                    link: Link {
+                    }),
+                    link: Arc::new(Link {
                         source: base64::encode(parent_hash.to_le_bytes()),
                         target: base64::encode(child_hash.to_le_bytes()),
                         value: 1,
-                    },
+                    }),
                 };
-                let j = serde_json::to_string(&sse_json)?;
-
-                for client in crate::WEBSOCKET_CLIENTS.read().await.values() {
-                    if let Err(e) = client.send(WsMessage { msg: j.clone() }).await {
-                        error!("Failed to send to WS: {}", e);
-                    }
+                if let Err(e) = self.websocket_tx.send(Some(sse_json)) {
+                    error!("Failed to broadcast to websockets: {:?}", e);
                 }
             }
         }

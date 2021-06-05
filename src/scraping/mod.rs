@@ -1,20 +1,34 @@
+use crate::config::Config;
+use crate::database::cache::CacheDb;
 use crate::errors::Errors;
 use futures::stream::{self, StreamExt};
 use influxdb_client::derives::PointSerialize;
 use influxdb_client::{Client, PointSerialize, Precision, Timestamp, TimestampOptions};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{error, info};
+
+#[derive(Clone)]
 pub struct InfluxDb {
-    client: Client,
+    client: Arc<Client>,
 }
 
 impl InfluxDb {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(config: &Config) -> Self {
+        let host = config.influxdb.clone().host;
+        let token = config.influxdb.clone().token;
+        let bucket = config.influxdb.clone().bucket;
+        let org = config.influxdb.clone().org;
+        let client = Client::new(host, token)
+            .with_bucket(bucket)
+            .with_org(org)
+            .with_precision(Precision::MS);
+        let client = Arc::new(client);
+        Self { client }
     }
 
-    pub async fn push_versions(&self) -> color_eyre::Result<()> {
-        let servers_map = crate::CACHE_DB.get_all_servers();
+    pub async fn push_versions(&self, cache: &CacheDb) -> color_eyre::Result<()> {
+        let servers_map = cache.get_all_servers();
         let mut points: Vec<ServerVersion> = Vec::new();
         servers_map
             .map(|x| {
@@ -24,7 +38,7 @@ impl InfluxDb {
                 server_name_untrimmed.replace("address/", "")
             })
             .for_each(|server_name| {
-                match crate::CACHE_DB.get_server_version(&server_name) {
+                match cache.get_server_version(&server_name) {
                     Ok(version) => {
                         if let Some(version) = version {
                             let now = SystemTime::now();
@@ -65,20 +79,6 @@ impl InfluxDb {
             })
             .await;
         Ok(())
-    }
-}
-impl Default for InfluxDb {
-    fn default() -> Self {
-        let config = crate::CONFIG.get().expect("unable to get config");
-        let host = config.influxdb.host.as_ref();
-        let token = config.influxdb.token.as_ref();
-        let bucket = config.influxdb.bucket.as_ref();
-        let org = config.influxdb.org.as_ref();
-        let client = Client::new(host, token)
-            .with_bucket(bucket)
-            .with_org(org)
-            .with_precision(Precision::MS);
-        Self { client }
     }
 }
 

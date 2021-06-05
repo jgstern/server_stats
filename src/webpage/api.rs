@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RelationsJson {
@@ -7,10 +7,10 @@ pub struct RelationsJson {
     pub links: BTreeSet<Link>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SSEJson {
-    pub node: RoomRelation,
-    pub link: Link,
+    pub node: Arc<RoomRelation>,
+    pub link: Arc<Link>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Ord, Eq, PartialOrd, Hash)]
