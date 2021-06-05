@@ -1674,6 +1674,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "opentelemetry"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "492848ff47f11b7f9de0443b404e2c5775f695e1af6b7076ca25f999581d547a"
+dependencies = [
+ "async-trait",
+ "crossbeam-channel",
+ "dashmap",
+ "fnv",
+ "futures",
+ "js-sys",
+ "lazy_static",
+ "percent-encoding",
+ "pin-project",
+ "rand",
+ "thiserror",
+]
+
+[[package]]
+name = "opentelemetry-prometheus"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f41760047df46012aaf2bb87fec0efed4d97f7a6af6825858c3b4d9438dadb94"
+dependencies = [
+ "opentelemetry",
+ "prometheus",
+ "protobuf",
+]
+
+[[package]]
 name = "os_str_bytes"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2436,6 +2466,9 @@ dependencies = [
  "mime_guess",
  "multimap",
  "once_cell",
+ "opentelemetry",
+ "opentelemetry-prometheus",
+ "prometheus",
  "rand",
  "regex",
  "reqwest",
@@ -2454,7 +2487,6 @@ dependencies = [
  "url",
  "walkdir",
  "warp",
- "warp-prometheus",
  "xxhash-rust",
 ]
 
@@ -3031,7 +3063,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09adeb8c97449311ccd28a427f96fb563e7fd31aabf994189879d9da2394b89d"
 dependencies = [
  "cfg-if",
- "log",
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
@@ -3393,18 +3424,6 @@ dependencies = [
  "tokio-util",
  "tower-service",
  "tracing",
-]
-
-[[package]]
-name = "warp-prometheus"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb00d11bbc584f0fadec1f5e4a6b413f4f5130c934b3fe0c06c74cd4d5b1dd40"
-dependencies = [
- "lazy_static",
- "log",
- "prometheus",
- "warp",
 ]
 
 [[package]]

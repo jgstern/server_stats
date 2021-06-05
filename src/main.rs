@@ -1,6 +1,11 @@
 #![deny(unsafe_code)]
 
-use crate::{config::Config, database::cache::CacheDb, scraping::InfluxDb, webpage::run_server};
+use crate::{
+    config::Config,
+    database::cache::CacheDb,
+    scraping::InfluxDb,
+    webpage::{init_prometheus, run_server},
+};
 use chrono::{prelude::*, Duration};
 use clap::Clap;
 use color_eyre::eyre::Result;
@@ -10,8 +15,13 @@ use matrix_sdk::{
     Client,
 };
 use once_cell::sync::{Lazy, OnceCell};
+use opentelemetry::metrics::ValueRecorder;
 use sqlx::{postgres::PgPoolOptions, PgPool};
-use std::{collections::BTreeMap, convert::TryFrom, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    convert::{TryFrom, TryInto},
+    sync::Arc,
+};
 use tokio::sync::{watch, Semaphore};
 use tokio::time::sleep;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -97,7 +107,6 @@ async fn main() -> Result<()> {
         .add_directive("sled=info".parse()?)
         //.add_directive("matrix_sdk=info".parse()?)
         //.add_directive("matrix_sdk_base::client=off".parse()?)
-        //.add_directive("matrix_sdk_appservice::actix::push_transactions=off".parse()?)
         .add_directive("rustls::session=off".parse()?);
 
     tracing_subscriber::fmt()
@@ -124,6 +133,7 @@ async fn main() -> Result<()> {
 
     let cloned_cache = cache.clone();
     let cloned_config = config.clone();
+    let (exporter, recorder) = init_prometheus();
     tokio::spawn(async move {
         let influx_db = InfluxDb::new(&cloned_config);
         let cache = cloned_cache.clone();
@@ -148,12 +158,14 @@ async fn main() -> Result<()> {
             info!("Starting sheduler");
             PG_POOL.set(pool);
 
-            start_queue(cache, influx_db, config.clone()).await.unwrap();
+            start_queue(cache, influx_db, config.clone(), Arc::new(recorder))
+                .await
+                .unwrap();
         };
     });
 
     info!("Starting webserver...");
-    run_server(&config, cache, rx).await;
+    run_server(&config, cache, rx, exporter).await;
 
     if let Some(pool) = PG_POOL.get() {
         pool.close().await;
@@ -161,7 +173,12 @@ async fn main() -> Result<()> {
     std::process::exit(0);
 }
 
-async fn start_queue(cache: CacheDb, influx_db: InfluxDb, config: Config) -> Result<()> {
+async fn start_queue(
+    cache: CacheDb,
+    influx_db: InfluxDb,
+    config: Config,
+    recorder: Arc<ValueRecorder<i64>>,
+) -> Result<()> {
     let mut sched = JobScheduler::new();
 
     let cache_two = cache.clone();
@@ -209,13 +226,15 @@ async fn start_queue(cache: CacheDb, influx_db: InfluxDb, config: Config) -> Res
     sched
         .add(
             //Should be */5
-            Job::new("0 */5 * * * *", |_, _| {
-                tokio::spawn(async {
+            Job::new("0 */5 * * * *", move |_, _| {
+                let recorder = recorder.clone();
+                tokio::spawn(async move {
                     if let Some(client) = crate::MATRIX_CLIENT.get() {
                         let joined_rooms = client.joined_rooms().len();
                         //TODO make sure to filter only banned ones here .iter().filter(|x|{x.})
                         let banned_rooms = client.left_rooms().len();
                         let total = joined_rooms + banned_rooms;
+                        recorder.record(total.try_into().unwrap(), &[]);
                         //TODO allow configuration
                         let room = crate::MATRIX_CLIENT.get().unwrap().get_joined_room(
                             &RoomId::try_from("!zeFBFCASPaEUIHzbqj:nordgedanken.dev").unwrap(),

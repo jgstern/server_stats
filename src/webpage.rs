@@ -3,6 +3,9 @@ use crate::{
     webpage::api::SSEJson,
 };
 use futures::{SinkExt, StreamExt};
+use opentelemetry::{global, metrics::ValueRecorder};
+use opentelemetry_prometheus::PrometheusExporter;
+use prometheus::{Encoder, TextEncoder};
 use std::{
     convert::Infallible,
     net::{IpAddr, SocketAddr},
@@ -14,12 +17,17 @@ use warp::{filters::BoxedFilter, ws::Message, Filter, Reply};
 
 pub mod api;
 
-pub async fn run_server(config: &Config, cache: CacheDb, rx: Receiver<Option<SSEJson>>) {
+pub async fn run_server(
+    config: &Config,
+    cache: CacheDb,
+    rx: Receiver<Option<SSEJson>>,
+    exporter: PrometheusExporter,
+) {
     info!("Starting appservice...");
     let appservice = generate_appservice(&config, cache.clone()).await;
     let addr = IpAddr::from_str(config.api.ip.as_ref());
-    let routes = warp::any()
-        .and(webpage(&config))
+    let routes = webpage(&config)
+        .or(prometheus_route(exporter))
         .or(websocket(rx.clone()))
         .or(warp::path("relations").and_then(move || {
             let cache = cache.clone();
@@ -34,8 +42,36 @@ pub async fn run_server(config: &Config, cache: CacheDb, rx: Receiver<Option<SSE
     }
 }
 
+pub fn init_prometheus() -> (PrometheusExporter, ValueRecorder<i64>) {
+    let exporter = opentelemetry_prometheus::exporter().init();
+    let meter = global::meter("server_stats");
+    let recorder = meter
+        .i64_value_recorder("server_stats_rooms_total")
+        .with_description("Records the total room count")
+        .init();
+    (exporter, recorder)
+}
+
+fn prometheus_route(exporter: PrometheusExporter) -> BoxedFilter<(impl Reply,)> {
+    warp::path::end()
+        .and(warp::path("metrics"))
+        .map(move || {
+            // Encode data as text or protobuf
+            let encoder = TextEncoder::new();
+            let metric_families = exporter.registry().gather();
+            let mut result = Vec::new();
+            if let Err(e) = encoder.encode(&metric_families, &mut result) {
+                error!("Failed to encode prometheus data: {:?}", e);
+            }
+
+            result
+        })
+        .boxed()
+}
+
 fn websocket(broadcast_rx: Receiver<Option<SSEJson>>) -> BoxedFilter<(impl Reply,)> {
-    warp::path("ws")
+    warp::path::end()
+        .and(warp::path("ws"))
         // The `ws()` filter will prepare the Websocket handshake.
         .and(warp::ws())
         .map(move |ws: warp::ws::Ws| {

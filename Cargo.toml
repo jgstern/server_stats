@@ -40,7 +40,9 @@ mime_guess = "2.0.3"
 rand = "0.8.3"
 
 warp = { version = "0.3", git = "https://github.com/seanmonstar/warp", rev = "ab313984df336847cb7bf406fb1c3978baaf3785", default-features = false, features = ["multipart", "websocket"] }
-warp-prometheus = "0.4.0"
+opentelemetry-prometheus = "0.7.0"
+opentelemetry = "0.14.0"
+prometheus = "0.12.0"
 
 [dependencies.matrix-sdk]
 #git = "https://github.com/matrix-org/matrix-rust-sdk"
