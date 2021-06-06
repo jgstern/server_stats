@@ -49,7 +49,7 @@ export class RoomListComponent implements OnInit {
 
     }
     this.api.getDataUpdates().subscribe(data => {
-      if (data != null && data != undefined) {
+      if (data != null) {
         const nodes = data.nodes;
         this.temp = nodes;
         if (this.first) {
@@ -91,7 +91,7 @@ export class RoomListComponent implements OnInit {
       includeScore: true,
       // Search in `author` and in `tags` array
       keys: [indexName]
-    }
+    };
 
     const fuse = new Fuse(this.temp, options);
 

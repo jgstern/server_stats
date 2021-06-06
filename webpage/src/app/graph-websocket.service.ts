@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
-import { EMPTY, Observable, Subject, timer } from 'rxjs';
-import { retryWhen, tap, delayWhen, switchAll, catchError } from 'rxjs/operators';
+import { EMPTY, Observable, timer } from 'rxjs';
+import { retryWhen, tap, delayWhen, catchError } from 'rxjs/operators';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
 import { Row } from './api.service';
 

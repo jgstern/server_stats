@@ -49,7 +49,7 @@ export class SpaceFinderComponent implements OnInit {
 
     }
     this.api.getDataUpdates().subscribe(data => {
-      if (data != null && data != undefined) {
+      if (data != null) {
         const nodes = data.nodes.filter(room => {
           return room.is_space;
         });
@@ -95,7 +95,7 @@ export class SpaceFinderComponent implements OnInit {
       includeScore: true,
       // Search in `author` and in `tags` array
       keys: [indexName]
-    }
+    };
 
     const fuse = new Fuse(this.temp, options);
 

@@ -86,7 +86,7 @@ export class LinkFinderComponent implements OnInit {
       includeScore: true,
       // Search in `author` and in `tags` array
       keys: ['name']
-    }
+    };
 
     const fuse = new Fuse(this.temp, options);
 
