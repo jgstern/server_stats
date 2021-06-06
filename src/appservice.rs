@@ -19,7 +19,7 @@ use matrix_sdk::{
     },
     identifiers::{EventId, RoomIdOrAliasId, ServerName, UserId},
     room::{Joined, Room},
-    uint, Client, EventHandler, Raw,
+    uint, Client, ClientConfig, EventHandler, Raw,
 };
 use matrix_sdk_appservice::{Appservice, AppserviceRegistration};
 use once_cell::sync::Lazy;
@@ -81,7 +81,10 @@ pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice 
     });*/
 
     let client = appservice
-        .virtual_user_client("server_stats")
+        .virtual_user_client_with_config(
+            "server_stats",
+            ClientConfig::default().store_path("./store/"),
+        )
         .await
         .unwrap();
     crate::MATRIX_CLIENT.set(client);
@@ -89,7 +92,10 @@ pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice 
     let event_handler = VoyagerBot::new(appservice.clone(), cache, config.clone());
 
     let client = appservice
-        .virtual_user_client("server_stats")
+        .virtual_user_client_with_config(
+            "server_stats",
+            ClientConfig::default().store_path("./store/"),
+        )
         .await
         .unwrap();
     client.set_event_handler(Box::new(event_handler)).await;
@@ -511,7 +517,10 @@ impl EventHandler for VoyagerBot {
         if let MembershipState::Invite = event.content.membership {
             let client = self
                 .appservice
-                .virtual_user_client("server_stats")
+                .virtual_user_client_with_config(
+                    "server_stats",
+                    ClientConfig::default().store_path("./store/"),
+                )
                 .await
                 .unwrap();
             client.join_room_by_id(room.room_id()).await.unwrap();
@@ -579,7 +588,10 @@ impl EventHandler for VoyagerBot {
             // Handle message
             let client = self
                 .appservice
-                .virtual_user_client("server_stats")
+                .virtual_user_client_with_config(
+                    "server_stats",
+                    ClientConfig::default().store_path("./store/"),
+                )
                 .await
                 .unwrap();
             let cache = self.cache.clone();

@@ -105,6 +105,7 @@ async fn main() -> Result<()> {
         // any directives parsed from the env variable.
         .add_directive("server_stats=info".parse()?)
         .add_directive("sled=info".parse()?)
+        //.add_directive("warp=info".parse()?)
         //.add_directive("matrix_sdk=info".parse()?)
         //.add_directive("matrix_sdk_base::client=off".parse()?)
         .add_directive("rustls::session=off".parse()?);

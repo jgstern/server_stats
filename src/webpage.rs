@@ -13,7 +13,7 @@ use std::{
 };
 use tokio::sync::watch::Receiver;
 use tracing::{error, info};
-use warp::{filters::BoxedFilter, ws::Message, Filter, Reply};
+use warp::{filters::BoxedFilter, http::StatusCode, ws::Message, Filter, Rejection, Reply};
 
 pub mod api;
 
@@ -26,14 +26,36 @@ pub async fn run_server(
     info!("Starting appservice...");
     let appservice = generate_appservice(&config, cache.clone()).await;
     let addr = IpAddr::from_str(config.api.ip.as_ref());
-    let routes = webpage(&config)
-        .or(prometheus_route(exporter))
-        .or(websocket(rx.clone()))
-        .or(warp::path("relations").and_then(move || {
-            let cache = cache.clone();
-            async move { relations(cache.clone()).await }
-        }))
-        .or(appservice.warp_filter());
+    let path = format!("{}index.html", config.api.webpage_path);
+    info!("Path is: {} and {}", config.api.webpage_path, path);
+    let routes = warp::any()
+        .and(appservice.warp_filter())
+        .or(warp::get()
+            .and(prometheus_route(exporter))
+            .or(websocket(rx.clone()))
+            .or(warp::path("health")
+                .and(warp::path::end())
+                .map(|| "Hello World"))
+            .or(warp::path("relations").and_then(move || {
+                let cache = cache.clone();
+                async move { relations(cache.clone()).await }
+            }))
+            .or(warp::fs::dir(config.api.webpage_path.to_string()))
+            .or(warp::path("spaces")
+                .and(warp::path::end())
+                .and(warp::fs::file(path.clone())))
+            .or(warp::path("links")
+                .and(warp::path::end())
+                .and(warp::fs::file(path.clone())))
+            .or(warp::path("3d")
+                .and(warp::path::end())
+                .and(warp::fs::file(path.clone())))
+            .or(warp::path("faq")
+                .and(warp::path::end())
+                .and(warp::fs::file(path.clone())))
+            .or(warp::path::end().and(warp::get()).and(warp::fs::file(path))))
+        .recover(handle_rejection)
+        .with(warp::trace::request());
     if let Ok(addr) = addr {
         let socket_addr = SocketAddr::new(addr, config.api.port);
         warp::serve(routes).run(socket_addr).await;
@@ -41,7 +63,13 @@ pub async fn run_server(
         error!("Unable to start webserver: Invalid IP Address")
     }
 }
-
+async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
+    // We should have expected this... Just log and say its a 500
+    error!("unhandled rejection: {:?}", err);
+    let code = StatusCode::INTERNAL_SERVER_ERROR;
+    let message = "UNHANDLED_REJECTION";
+    Ok(warp::reply::with_status(message, code))
+}
 pub fn init_prometheus() -> (PrometheusExporter, ValueRecorder<i64>) {
     let exporter = opentelemetry_prometheus::exporter().init();
     let meter = global::meter("server_stats");
@@ -53,8 +81,8 @@ pub fn init_prometheus() -> (PrometheusExporter, ValueRecorder<i64>) {
 }
 
 fn prometheus_route(exporter: PrometheusExporter) -> BoxedFilter<(impl Reply,)> {
-    warp::path::end()
-        .and(warp::path("metrics"))
+    warp::path("metrics")
+        .and(warp::path::end())
         .map(move || {
             // Encode data as text or protobuf
             let encoder = TextEncoder::new();
@@ -70,8 +98,8 @@ fn prometheus_route(exporter: PrometheusExporter) -> BoxedFilter<(impl Reply,)> 
 }
 
 fn websocket(broadcast_rx: Receiver<Option<SSEJson>>) -> BoxedFilter<(impl Reply,)> {
-    warp::path::end()
-        .and(warp::path("ws"))
+    warp::path("ws")
+        .and(warp::path::end())
         // The `ws()` filter will prepare the Websocket handshake.
         .and(warp::ws())
         .map(move |ws: warp::ws::Ws| {
@@ -93,12 +121,6 @@ fn websocket(broadcast_rx: Receiver<Option<SSEJson>>) -> BoxedFilter<(impl Reply
                 }
             })
         })
-        .boxed()
-}
-
-fn webpage(config: &Config) -> BoxedFilter<(impl Reply,)> {
-    warp::path::end()
-        .and(warp::fs::dir(config.api.webpage_path.to_string()))
         .boxed()
 }
 
