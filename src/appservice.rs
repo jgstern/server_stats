@@ -34,9 +34,14 @@ pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice 
     let server_name = config.bot.clone().server_name;
     let registration = AppserviceRegistration::try_from_yaml_file("./registration.yaml").unwrap();
 
-    let appservice = Appservice::new(homeserver_url.as_str(), server_name.as_str(), registration)
-        .await
-        .unwrap();
+    let mut appservice = Appservice::new_with_config(
+        homeserver_url.as_str(),
+        server_name.as_str(),
+        registration,
+        ClientConfig::default().store_path("./store/"),
+    )
+    .await
+    .unwrap();
 
     /*use matrix_sdk::{
         api::r0::{
@@ -81,24 +86,16 @@ pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice 
     });*/
 
     let client = appservice
-        .virtual_user_client_with_config(
-            "server_stats",
-            ClientConfig::default().store_path("./store/"),
-        )
+        .virtual_user_client("server_stats")
         .await
         .unwrap();
     crate::MATRIX_CLIENT.set(client);
 
     let event_handler = VoyagerBot::new(appservice.clone(), cache, config.clone());
 
-    let client = appservice
-        .virtual_user_client_with_config(
-            "server_stats",
-            ClientConfig::default().store_path("./store/"),
-        )
-        .await
-        .unwrap();
-    client.set_event_handler(Box::new(event_handler)).await;
+    if let Err(e) = appservice.set_event_handler(Box::new(event_handler)).await {
+        error!("Failed to set event handler: {}", e);
+    }
 
     appservice
 }
@@ -515,14 +512,7 @@ impl EventHandler for VoyagerBot {
         info!("Got invite");
 
         if let MembershipState::Invite = event.content.membership {
-            let client = self
-                .appservice
-                .virtual_user_client_with_config(
-                    "server_stats",
-                    ClientConfig::default().store_path("./store/"),
-                )
-                .await
-                .unwrap();
+            let client = self.appservice.get_cached_client(None).unwrap();
             client.join_room_by_id(room.room_id()).await.unwrap();
             VoyagerBot::set_direct(client, room.clone(), event).await;
             info!("Successfully joined room {}", room.room_id());
@@ -586,14 +576,7 @@ impl EventHandler for VoyagerBot {
             }
 
             // Handle message
-            let client = self
-                .appservice
-                .virtual_user_client_with_config(
-                    "server_stats",
-                    ClientConfig::default().store_path("./store/"),
-                )
-                .await
-                .unwrap();
+            let client = self.appservice.get_cached_client(None).unwrap();
             let cache = self.cache.clone();
             let config = self.config.clone();
             tokio::spawn(async move {

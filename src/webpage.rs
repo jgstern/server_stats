@@ -3,9 +3,11 @@ use crate::{
     webpage::api::SSEJson,
 };
 use futures::{SinkExt, StreamExt};
-use opentelemetry::{global, metrics::ValueRecorder};
 use opentelemetry_prometheus::PrometheusExporter;
-use prometheus::{Encoder, TextEncoder};
+use prometheus::{
+    core::{AtomicF64, GenericGauge},
+    opts, register_gauge, Encoder, Registry, TextEncoder,
+};
 use std::{
     convert::Infallible,
     net::{IpAddr, SocketAddr},
@@ -70,14 +72,17 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     let message = "UNHANDLED_REJECTION";
     Ok(warp::reply::with_status(message, code))
 }
-pub fn init_prometheus() -> (PrometheusExporter, ValueRecorder<i64>) {
-    let exporter = opentelemetry_prometheus::exporter().init();
-    let meter = global::meter("server_stats");
-    let recorder = meter
-        .i64_value_recorder("server_stats_rooms_total")
-        .with_description("Records the total room count")
+pub fn init_prometheus() -> (PrometheusExporter, GenericGauge<AtomicF64>) {
+    let registry = Registry::new();
+    let opts = opts!("rooms_total", "Rooms statistics").namespace("server_stats");
+    let gauge = register_gauge!(opts).unwrap();
+    registry
+        .register(Box::new(gauge.clone()))
+        .expect("Creating a prometheus registry");
+    let exporter = opentelemetry_prometheus::exporter()
+        .with_registry(registry)
         .init();
-    (exporter, recorder)
+    (exporter, gauge)
 }
 
 fn prometheus_route(exporter: PrometheusExporter) -> BoxedFilter<(impl Reply,)> {
@@ -103,25 +108,26 @@ fn websocket(broadcast_rx: Receiver<Option<SSEJson>>) -> BoxedFilter<(impl Reply
         // The `ws()` filter will prepare the Websocket handshake.
         .and(warp::ws())
         .map(move |ws: warp::ws::Ws| {
-            let mut broadcast_rx = broadcast_rx.clone();
+            let broadcast_rx = broadcast_rx.clone();
             // And then our closure will be called when it completes...
-            ws.on_upgrade(|websocket| {
-                // Just echo all messages back...
-                let (mut tx, _rx) = websocket.split();
-                async move {
-                    while broadcast_rx.changed().await.is_ok() {
-                        let json = (*broadcast_rx.borrow()).clone();
-                        if let Some(json) = json {
-                            let j = serde_json::to_string(&json).unwrap();
-                            if let Err(e) = tx.send(Message::text(j.clone())).await {
-                                error!("Failed to send via websocket: {:?}", e);
-                            }
-                        }
-                    }
-                }
-            })
+            ws.on_upgrade(|websocket| do_websocket(websocket, broadcast_rx))
         })
         .boxed()
+}
+
+async fn do_websocket(websocket: warp::ws::WebSocket, mut broadcast_rx: Receiver<Option<SSEJson>>) {
+    // Just echo all messages back...
+    let (mut tx, _rx) = websocket.split();
+    while broadcast_rx.changed().await.is_ok() {
+        let json = (*broadcast_rx.borrow()).clone();
+        if let Some(json) = json {
+            let j = serde_json::to_string(&json).unwrap();
+            if let Err(e) = tx.send(Message::text(j.clone())).await {
+                error!("Failed to send via websocket: {:?}", e);
+                return;
+            }
+        }
+    }
 }
 
 async fn relations(cache: CacheDb) -> Result<impl Reply, Infallible> {

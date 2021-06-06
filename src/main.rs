@@ -15,13 +15,9 @@ use matrix_sdk::{
     Client,
 };
 use once_cell::sync::{Lazy, OnceCell};
-use opentelemetry::metrics::ValueRecorder;
+use prometheus::core::{AtomicF64, GenericGauge};
 use sqlx::{postgres::PgPoolOptions, PgPool};
-use std::{
-    collections::BTreeMap,
-    convert::{TryFrom, TryInto},
-    sync::Arc,
-};
+use std::{collections::BTreeMap, convert::TryFrom, sync::Arc};
 use tokio::sync::{watch, Semaphore};
 use tokio::time::sleep;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -94,6 +90,7 @@ async fn force_cleanup(cache: &CacheDb, config: &Config) -> Result<()> {
 
     Ok(())
 }
+//#[tokio::main(flavor = "multi_thread", worker_threads = 1_000)]
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
@@ -178,7 +175,7 @@ async fn start_queue(
     cache: CacheDb,
     influx_db: InfluxDb,
     config: Config,
-    recorder: Arc<ValueRecorder<i64>>,
+    recorder: Arc<GenericGauge<AtomicF64>>,
 ) -> Result<()> {
     let mut sched = JobScheduler::new();
 
@@ -235,7 +232,9 @@ async fn start_queue(
                         //TODO make sure to filter only banned ones here .iter().filter(|x|{x.})
                         let banned_rooms = client.left_rooms().len();
                         let total = joined_rooms + banned_rooms;
-                        recorder.record(total.try_into().unwrap(), &[]);
+
+                        recorder.set(total as f64);
+                        assert_eq!(recorder.get() as i64, total as i64);
                         //TODO allow configuration
                         let room = crate::MATRIX_CLIENT.get().unwrap().get_joined_room(
                             &RoomId::try_from("!zeFBFCASPaEUIHzbqj:nordgedanken.dev").unwrap(),
