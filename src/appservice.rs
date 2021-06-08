@@ -245,6 +245,7 @@ impl VoyagerBot {
             || room_alias == "#Nextcloud:matrix.org"
             || room_alias == "#NEXTCLOUD:matrix.org"
             || room_alias == "#NextCloud:matrix.org"
+            || room_alias == "!UGYpXmlyESJlkXkarj:matrix.org"
         {
             return;
         }
