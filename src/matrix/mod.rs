@@ -13,6 +13,7 @@ struct DestinationKey {
     destination: String,
 }
 
+#[tracing::instrument(skip(pool, config, cache))]
 pub async fn fetch_servers_from_db(pool: &PgPool, config: &Config, cache: &CacheDb) -> Result<()> {
     let postgres_query = config.postgres.query.as_ref();
     let rows = sqlx::query_as::<_, DestinationKey>(postgres_query)
@@ -42,7 +43,8 @@ pub async fn fetch_servers_from_db(pool: &PgPool, config: &Config, cache: &Cache
     Ok(())
 }
 
-pub async fn get_server_version(
+#[tracing::instrument(skip(client, cache))]
+pub async fn fetch_server_version(
     server_name: &str,
     client: &reqwest::Client,
     cache: &CacheDb,

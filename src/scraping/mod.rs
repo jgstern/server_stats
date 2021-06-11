@@ -6,7 +6,9 @@ use influxdb_client::derives::PointSerialize;
 use influxdb_client::{Client, PointSerialize, Precision, Timestamp, TimestampOptions};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::debug_span;
 use tracing::{error, info};
+use tracing_futures::Instrument;
 
 #[derive(Clone)]
 pub struct InfluxDb {
@@ -14,6 +16,7 @@ pub struct InfluxDb {
 }
 
 impl InfluxDb {
+    #[tracing::instrument(name = "InfluxDb::new", skip(config))]
     pub fn new(config: &Config) -> Self {
         let host = config.influxdb.clone().host;
         let token = config.influxdb.clone().token;
@@ -27,6 +30,7 @@ impl InfluxDb {
         Self { client }
     }
 
+    #[tracing::instrument(skip(self, cache))]
     pub async fn push_versions(&self, cache: &CacheDb) -> color_eyre::Result<()> {
         let servers_map = cache.get_all_servers();
         let mut points: Vec<ServerVersion> = Vec::new();
@@ -64,6 +68,7 @@ impl InfluxDb {
             info!("No points!");
             return Ok(());
         }
+        let span = debug_span!("Push points to influx-db");
         stream::iter(points)
             .chunks(40)
             .for_each(|chunk| async move {
@@ -77,6 +82,7 @@ impl InfluxDb {
                     error!("Got influxdb error: {}", e);
                 };
             })
+            .instrument(span)
             .await;
         Ok(())
     }

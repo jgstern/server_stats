@@ -8,3 +8,4 @@ config.yaml
 /storage_old
 /store
 registration.yaml
+out.rs

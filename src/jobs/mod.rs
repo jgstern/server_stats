@@ -39,7 +39,7 @@ pub async fn update_versions(cache: &CacheDb, influx_db: InfluxDb) -> color_eyre
         })
         .for_each_concurrent(None, |server_address| async {
             if let Err(e) =
-                crate::matrix::get_server_version(&server_address.await, &client, &cache.clone())
+                crate::matrix::fetch_server_version(&server_address.await, &client, &cache.clone())
                     .await
             {
                 error!("Failed to get version: {}", e);

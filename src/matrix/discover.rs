@@ -28,6 +28,8 @@ impl fmt::Display for MatrixSsServername {
 
 /// Resolves the server_name for usage with matrix S-S-Api according too https://matrix.org/docs/spec/server_server/latest#server-discovery
 /// It is required that the HOST header always gets set to the server_name when it is returning a IP.
+// TODO add more granular tracing
+#[tracing::instrument]
 pub async fn resolve_server_name(server_name: &str) -> Result<MatrixSsServername, Errors> {
     // If ip literal with port
     if let Ok(addr) = SocketAddr::from_str(&server_name) {

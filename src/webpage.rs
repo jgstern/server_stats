@@ -1,5 +1,7 @@
 use crate::{
-    appservice::generate_appservice, config::Config, database::cache::CacheDb,
+    appservice::generate_appservice,
+    config::Config,
+    database::{cache::CacheDb, graph::GraphDb},
     webpage::api::SSEJson,
 };
 use futures::{SinkExt, StreamExt};
@@ -8,10 +10,12 @@ use prometheus::{
     core::{AtomicF64, GenericGauge},
     opts, register_gauge, Encoder, Registry, TextEncoder,
 };
+use serde::Deserialize;
 use std::{
     convert::Infallible,
     net::{IpAddr, SocketAddr},
     str::FromStr,
+    sync::Arc,
 };
 use tokio::sync::watch::Receiver;
 use tracing::{error, info};
@@ -19,6 +23,12 @@ use warp::{filters::BoxedFilter, http::StatusCode, ws::Message, Filter, Rejectio
 
 pub mod api;
 
+#[derive(Deserialize)]
+struct Servers {
+    include_members: bool,
+}
+
+#[tracing::instrument(skip(config, cache, rx, exporter))]
 pub async fn run_server(
     config: &Config,
     cache: CacheDb,
@@ -29,7 +39,14 @@ pub async fn run_server(
     let appservice = generate_appservice(&config, cache.clone()).await;
     let addr = IpAddr::from_str(config.api.ip.as_ref());
     let path = format!("{}index.html", config.api.webpage_path);
+    let graph = cache.graph.clone();
+    let graph_one = graph.clone();
+    let graph_two = graph.clone();
     info!("Path is: {} and {}", config.api.webpage_path, path);
+
+    let opt_servers_query = warp::query::<Servers>()
+        .map(Some)
+        .or_else(|_| async { Ok::<(Option<Servers>,), std::convert::Infallible>((None,)) });
     let routes = warp::any()
         .and(appservice.warp_filter())
         .or(warp::get()
@@ -38,10 +55,24 @@ pub async fn run_server(
             .or(warp::path("health")
                 .and(warp::path::end())
                 .map(|| "Hello World"))
-            .or(warp::path("relations").and_then(move || {
-                let cache = cache.clone();
-                async move { relations(cache.clone()).await }
-            }))
+            .or(warp::path("relations")
+                .map(move || graph_one.clone())
+                .and(warp::path::end())
+                .and_then(|graph: Arc<GraphDb>| async { relations(graph).await }))
+            .or(warp::path("servers")
+                .and(warp::path::end())
+                .and(opt_servers_query)
+                .map(move |query: Option<Servers>| {
+                    if let Some(query) = query {
+                        return (graph_two.clone(), query.include_members);
+                    }
+                    (graph_two.clone(), false)
+                })
+                .and_then(
+                    move |(graph, include_members): (Arc<GraphDb>, bool)| async move {
+                        servers(graph, include_members).await
+                    },
+                ))
             .or(warp::fs::dir(config.api.webpage_path.to_string()))
             .or(warp::path("spaces")
                 .and(warp::path::end())
@@ -65,6 +96,8 @@ pub async fn run_server(
         error!("Unable to start webserver: Invalid IP Address")
     }
 }
+
+#[tracing::instrument]
 async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     // We should have expected this... Just log and say its a 500
     error!("unhandled rejection: {:?}", err);
@@ -72,6 +105,8 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     let message = "UNHANDLED_REJECTION";
     Ok(warp::reply::with_status(message, code))
 }
+
+#[tracing::instrument]
 pub fn init_prometheus() -> (PrometheusExporter, GenericGauge<AtomicF64>) {
     let registry = Registry::new();
     let opts = opts!("rooms_total", "Rooms statistics").namespace("server_stats");
@@ -85,6 +120,7 @@ pub fn init_prometheus() -> (PrometheusExporter, GenericGauge<AtomicF64>) {
     (exporter, gauge)
 }
 
+#[tracing::instrument(skip(exporter))]
 fn prometheus_route(exporter: PrometheusExporter) -> BoxedFilter<(impl Reply,)> {
     warp::path("metrics")
         .and(warp::path::end())
@@ -102,6 +138,7 @@ fn prometheus_route(exporter: PrometheusExporter) -> BoxedFilter<(impl Reply,)> 
         .boxed()
 }
 
+#[tracing::instrument(skip(broadcast_rx))]
 fn websocket(broadcast_rx: Receiver<Option<SSEJson>>) -> BoxedFilter<(impl Reply,)> {
     warp::path("ws")
         .and(warp::path::end())
@@ -115,6 +152,7 @@ fn websocket(broadcast_rx: Receiver<Option<SSEJson>>) -> BoxedFilter<(impl Reply
         .boxed()
 }
 
+#[tracing::instrument(skip(broadcast_rx))]
 async fn do_websocket(websocket: warp::ws::WebSocket, mut broadcast_rx: Receiver<Option<SSEJson>>) {
     // Just echo all messages back...
     let (mut tx, _rx) = websocket.split();
@@ -124,13 +162,21 @@ async fn do_websocket(websocket: warp::ws::WebSocket, mut broadcast_rx: Receiver
             let j = serde_json::to_string(&json).unwrap();
             if let Err(e) = tx.send(Message::text(j.clone())).await {
                 error!("Failed to send via websocket: {:?}", e);
+                tx.close().await;
                 return;
             }
         }
     }
 }
 
-async fn relations(cache: CacheDb) -> Result<impl Reply, Infallible> {
-    let relations = cache.graph.get_json_relations().await;
+#[tracing::instrument(skip(graph))]
+async fn relations(graph: Arc<GraphDb>) -> Result<impl Reply, Infallible> {
+    let relations = graph.get_json_relations().await;
     Ok(warp::reply::json(&relations))
+}
+
+#[tracing::instrument(skip(graph))]
+async fn servers(graph: Arc<GraphDb>, include_members: bool) -> Result<impl Reply, Infallible> {
+    let servers = graph.get_servers_json(include_members).await;
+    Ok(warp::reply::json(&servers))
 }

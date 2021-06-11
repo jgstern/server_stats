@@ -39,6 +39,7 @@ pub struct Api {
 }
 
 impl Config {
+    #[tracing::instrument]
     pub fn load<P: AsRef<std::path::Path> + std::fmt::Debug>(
         path: P,
     ) -> Result<Self, crate::errors::Errors> {

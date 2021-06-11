@@ -17,16 +17,16 @@ use matrix_sdk::{
         AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, StrippedStateEvent,
         SyncMessageEvent,
     },
-    identifiers::{EventId, RoomIdOrAliasId, ServerName, UserId},
+    identifiers::{EventId, RoomId, RoomIdOrAliasId, ServerName, UserId},
     room::{Joined, Room},
-    uint, Client, ClientConfig, EventHandler, Raw,
+    uint, Client, ClientConfig, EventHandler, Raw, RequestConfig, RoomType,
 };
 use matrix_sdk_appservice::{Appservice, AppserviceRegistration};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::{collections::BTreeMap, convert::TryFrom, time::Duration};
 use tokio::time::sleep;
-use tracing::{error, info};
+use tracing::{error, info, span, warn, Instrument, Level};
 // use matrix_sdk::events::SyncStateEvent;
 
 pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice {
@@ -38,7 +38,14 @@ pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice 
         homeserver_url.as_str(),
         server_name.as_str(),
         registration,
-        ClientConfig::default().store_path("./store/"),
+        ClientConfig::default()
+            .store_path("./store/")
+            .request_config(
+                RequestConfig::default()
+                    .disable_retry()
+                    .retry_timeout(Duration::from_secs(30))
+                    .timeout(Duration::from_secs(30)),
+            ),
     )
     .await
     .unwrap();
@@ -108,8 +115,12 @@ static MESSAGES_FILTER: Lazy<RoomEventFilter> = Lazy::new(|| {
     })
 });
 
-static REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[#!][a-zA-Z0-9.\-_#=]+:[a-zA-Z0-9.\-_]+[a-zA-Z0-9]").unwrap());
+static REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"[#!](?:[\p{Emoji}--\p{Ascii}]|[a-zA-Z0-9.\-_#=])+:[a-zA-Z0-9.\-_]+[a-zA-Z0-9]")
+        .unwrap()
+});
+
+#[derive(Debug)]
 struct VoyagerBot {
     appservice: Appservice,
     cache: CacheDb,
@@ -117,6 +128,7 @@ struct VoyagerBot {
 }
 
 impl VoyagerBot {
+    #[tracing::instrument(name = "VoyagerBot::new", skip(config, cache, appservice))]
     pub fn new(appservice: Appservice, cache: CacheDb, config: Config) -> Self {
         Self {
             appservice,
@@ -125,6 +137,7 @@ impl VoyagerBot {
         }
     }
 
+    #[tracing::instrument(skip(client, room))]
     async fn set_direct(
         client: Client,
         room: Room,
@@ -194,6 +207,7 @@ impl VoyagerBot {
         };
     }
 
+    #[tracing::instrument(skip(config, cache, client, room, msg_body))]
     #[async_recursion::async_recursion]
     async fn process_message(
         config: Config,
@@ -214,13 +228,22 @@ impl VoyagerBot {
 
             let client = client.clone();
             let room = room.clone();
-            tokio::spawn(VoyagerBot::search_new_room(
-                config.clone(),
-                cache.clone(),
-                client,
-                room_alias,
-                room,
-            ));
+            let span = span!(
+                Level::INFO,
+                "Starting to process new room",
+                room_alias = &cap[0],
+                parent_room_id = room.room_id().as_str()
+            );
+            tokio::spawn(
+                VoyagerBot::search_new_room(
+                    config.clone(),
+                    cache.clone(),
+                    client,
+                    room_alias,
+                    room,
+                )
+                .instrument(span),
+            );
         }
 
         // If there is a match mark the event as read to indicate it worked
@@ -231,6 +254,7 @@ impl VoyagerBot {
         };
     }
 
+    #[tracing::instrument(skip(config, cache, client, parent_room))]
     async fn search_new_room(
         config: Config,
         cache: CacheDb,
@@ -251,27 +275,48 @@ impl VoyagerBot {
         }
 
         // Try to join and give it max 5 tries to do so.
-        let mut tries: i32 = 0;
+        let mut tries: u8 = 5;
         let mut room = None;
-        while tries <= 5 && room.is_none() {
-            room = VoyagerBot::try_join(client.clone(), &room_alias, tries).await;
-            tries += 1;
+        warn!("Trying to join {}", room_alias);
+        while tries > 0 && room.is_none() {
+            if tries == 0 {
+                warn!("No retries left for {}", room_alias);
+                break;
+            }
+            room = VoyagerBot::try_join(client.clone(), &room_alias).await;
+            warn!("{} retries left for {}", tries, room_alias);
+            tries -= 1;
         }
 
         // Do not continue if room not found
         if room.is_none() {
+            warn!("Didnt get room for {}", room_alias);
             return;
+        } else {
+            info!("Got room for {}", room_alias);
         }
 
         // Access room_id once
+
         let room = room.unwrap().clone();
-        let room_id = room.room_id();
+        let clone_room = room.clone();
+        let room_id = clone_room.room_id();
 
         // Save room to db
-        if VoyagerBot::save_to_db(&cache, room_alias, room_id.as_str(), parent_room).await {
+        if VoyagerBot::save_to_db(&cache, room_alias.clone(), room_id.as_str(), parent_room).await {
             return;
         }
+        VoyagerBot::fetch_messages(room_id, room, client, config, cache).await;
+    }
 
+    #[tracing::instrument(skip(room, client, config, cache))]
+    async fn fetch_messages(
+        room_id: &RoomId,
+        room: Joined,
+        client: Client,
+        config: Config,
+        cache: CacheDb,
+    ) {
         let mut resp = None;
         if let Ok(_guard) = MESSAGES_SEMPAHORE.acquire().await {
             // Prepare messages request
@@ -314,17 +359,27 @@ impl VoyagerBot {
                                     let parent_room = room.clone();
                                     let cache = cache.clone();
                                     let config = config.clone();
-                                    tokio::spawn(async move {
-                                        VoyagerBot::process_message(
-                                            config,
-                                            cache,
-                                            client,
-                                            &text_content.body,
-                                            parent_room,
-                                            None,
-                                        )
-                                        .await;
-                                    });
+                                    let span =
+                                        span!(Level::INFO, "Starting to process new message",);
+                                    tokio::spawn(
+                                        async move {
+                                            let span = span!(
+                                                Level::INFO,
+                                                "Starting to process new message inner",
+                                            );
+                                            VoyagerBot::process_message(
+                                                config,
+                                                cache,
+                                                client,
+                                                &text_content.body,
+                                                parent_room,
+                                                None,
+                                            )
+                                            .instrument(span)
+                                            .await;
+                                        }
+                                        .instrument(span),
+                                    );
                                 }
                             };
                         };
@@ -372,23 +427,9 @@ impl VoyagerBot {
         }
     }
 
-    pub async fn try_join(client: Client, room_alias: &str, tries: i32) -> Option<Joined> {
-        if tries >= 0 {
-            // Check if we already knew the room and exit early if it is the case
-            let already_joined_room_id = client
-                .joined_rooms()
-                .iter()
-                .find(|room| {
-                    if let Some(alias) = room.canonical_alias() {
-                        return alias == room_alias;
-                    };
-                    *room.room_id() == room_alias
-                })
-                .cloned();
-            if already_joined_room_id.is_some() {
-                return already_joined_room_id;
-            }
-        }
+    #[tracing::instrument(skip(client))]
+    pub async fn join_via_server(client: Client, room_alias: &str) -> Option<Joined> {
+        warn!("Trying to join {} via synapse", room_alias);
         // Join the room via the server
         match RoomIdOrAliasId::try_from(room_alias) {
             Ok(room_id_or_alias) => {
@@ -404,12 +445,33 @@ impl VoyagerBot {
                     .await
                 {
                     Ok(resp) => {
-                        // Wait for sync to roughly complete
-                        sleep(Duration::from_secs(5)).await;
                         let room = client.get_joined_room(&resp.room_id);
                         if let Some(room) = room {
                             return Some(room);
-                        };
+                        } else {
+                            warn!("Room {} was not in the get_joined_room() response. Going to create a fake room for now...",room_alias);
+                            // We need to fake a room for now
+                            // TODO see how to correctly do this
+                            let mut base_room = client
+                                .store()
+                                .get_or_create_room(&resp.room_id, RoomType::Joined)
+                                .await;
+
+                            if let RoomType::Invited = base_room.room_type() {
+                                info!(
+                                    "Fallback room created with type {:?} instead of Joined. Correcting...",
+                                    base_room.room_type()
+                                );
+                                base_room.mark_as_joined();
+                            } else if let RoomType::Left = base_room.room_type() {
+                                info!(
+                                    "Fallback room created with type {:?} instead of Joined. Correcting...",
+                                    base_room.room_type()
+                                );
+                                base_room.mark_as_joined();
+                            }
+                            return Joined::new(client.clone(), base_room);
+                        }
                     }
                     Err(e) => {
                         error!("Failed to join room ({}): {}", room_alias, e);
@@ -422,6 +484,26 @@ impl VoyagerBot {
         None
     }
 
+    #[tracing::instrument(skip(client))]
+    pub async fn try_join(client: Client, room_alias: &str) -> Option<Joined> {
+        // Check if we already knew the room and exit early if it is the case
+        let already_joined_room_id = client
+            .joined_rooms()
+            .iter()
+            .find(|room| {
+                if let Some(alias) = room.canonical_alias() {
+                    return alias == room_alias;
+                };
+                *room.room_id() == room_alias
+            })
+            .cloned();
+        if already_joined_room_id.is_some() {
+            return already_joined_room_id;
+        }
+        VoyagerBot::join_via_server(client, room_alias).await
+    }
+
+    #[tracing::instrument(skip(cache, parent_room))]
     /// Returns true if we want to exit early
     async fn save_to_db(
         cache: &CacheDb,
@@ -465,6 +547,7 @@ impl VoyagerBot {
         false
     }
 
+    #[tracing::instrument(skip(config))]
     /// Calls the purge_history API at synapse to cleanup rooms
     async fn cleanup(room_id: String, config: &Config) -> color_eyre::Result<()> {
         let now = Utc::now();
@@ -501,6 +584,7 @@ impl VoyagerBot {
 
 #[async_trait]
 impl EventHandler for VoyagerBot {
+    #[tracing::instrument(skip(self, room, event))]
     async fn on_stripped_state_member(
         &self,
         room: Room,
@@ -534,6 +618,7 @@ impl EventHandler for VoyagerBot {
         };
     }*/
 
+    #[tracing::instrument(skip(event, room, self))]
     async fn on_room_message(&self, room: Room, event: &SyncMessageEvent<MessageEventContent>) {
         if let Room::Joined(room) = room {
             let msg_body = if let SyncMessageEvent {
@@ -580,10 +665,26 @@ impl EventHandler for VoyagerBot {
             let client = self.appservice.get_cached_client(None).unwrap();
             let cache = self.cache.clone();
             let config = self.config.clone();
-            tokio::spawn(async move {
-                VoyagerBot::process_message(config, cache, client, &msg_body, room, Some(event_id))
+
+            let span = span!(
+                Level::INFO,
+                "Starting to process new message",
+                event_id = event_id.as_str()
+            );
+            tokio::spawn(
+                async move {
+                    VoyagerBot::process_message(
+                        config,
+                        cache,
+                        client,
+                        &msg_body,
+                        room,
+                        Some(event_id),
+                    )
                     .await;
-            });
+                }
+                .instrument(span),
+            );
         };
     }
 }

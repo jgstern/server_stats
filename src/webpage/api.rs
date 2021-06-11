@@ -40,3 +40,8 @@ pub enum Jsonline {
     RoomRelation(RoomRelation),
     Links(BTreeSet<Link>),
 }
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Ord, Eq, PartialOrd, Hash)]
+pub struct ServersJson {
+    pub servers: BTreeSet<String>,
+}

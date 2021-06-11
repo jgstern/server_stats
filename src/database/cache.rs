@@ -16,6 +16,7 @@ pub struct CacheDb {
 }
 
 impl CacheDb {
+    #[tracing::instrument(name = "CacheDb::new", skip(tx))]
     pub fn new(tx: Sender<Option<SSEJson>>) -> Self {
         info!("Created new db");
         let db = sled::Config::default()
@@ -27,11 +28,18 @@ impl CacheDb {
         let state = db.open_tree(b"state").unwrap();
         let parent_child = db.open_tree(b"parent_child").unwrap();
         let child_parent = db.open_tree(b"child_parent").unwrap();
-        let graph = Arc::new(GraphDb::new(hash_map, state, parent_child, child_parent,tx));
+        let graph = Arc::new(GraphDb::new(
+            hash_map,
+            state,
+            parent_child,
+            child_parent,
+            tx,
+        ));
         let db = Arc::new(db);
         CacheDb { db, graph }
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn set_server_address(&self, server_name: &str, server_address: String) -> Result<()> {
         self.db.insert(
             format!("address/{}", server_name).as_bytes(),
@@ -41,6 +49,7 @@ impl CacheDb {
         Ok(())
     }
 
+    #[tracing::instrument(name = "cache::set_server_version", skip(self))]
     pub fn set_server_version(
         &self,
         server_name: &str,
@@ -55,6 +64,7 @@ impl CacheDb {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn contains_server(&self, server_name: &str) -> bool {
         if let Ok(res) = self
             .db
@@ -65,6 +75,7 @@ impl CacheDb {
         false
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn get_server_address(&self, server_name: &str) -> Option<IVec> {
         if let Ok(res) = self.db.get(format!("address/{}", server_name).as_bytes()) {
             return res;
@@ -74,6 +85,7 @@ impl CacheDb {
         None
     }
 
+    #[tracing::instrument(name = "cache::get_server_version", skip(self))]
     pub fn get_server_version(&self, server_name: &str) -> Result<Option<MatrixVersionServer>> {
         match self.db.get(format!("version/{}", server_name).as_bytes()) {
             Ok(res) => {
@@ -88,6 +100,7 @@ impl CacheDb {
         Ok(None)
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn get_all_addresses(
         &self,
     ) -> impl DoubleEndedIterator<Item = sled::Result<IVec>> + Send + Sync {
@@ -96,6 +109,7 @@ impl CacheDb {
         r.values()
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn get_all_servers(
         &self,
     ) -> impl DoubleEndedIterator<Item = sled::Result<IVec>> + Send + Sync {
