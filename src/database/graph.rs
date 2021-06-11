@@ -402,6 +402,9 @@ impl GraphDb {
             .iter()
             .find(|room| room.room_id() == room_id_serialized)
         {
+            if room.is_tombstoned() {
+                return None;
+            }
             let alias = if let Some(alias) = room.canonical_alias() {
                 alias.as_str().into()
             } else {

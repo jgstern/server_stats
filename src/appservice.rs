@@ -14,8 +14,8 @@ use matrix_sdk::{
             member::{MemberEventContent, MembershipState},
             message::{MessageEventContent, MessageType, TextMessageEventContent},
         },
-        AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, StrippedStateEvent,
-        SyncMessageEvent,
+        AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, EventType, RawExt,
+        StrippedStateEvent, SyncMessageEvent,
     },
     identifiers::{EventId, RoomId, RoomIdOrAliasId, ServerName, UserId},
     room::{Joined, Room},
@@ -470,6 +470,206 @@ impl VoyagerBot {
                                 );
                                 base_room.mark_as_joined();
                             }
+                            // Get base info
+
+                            // Encryption
+                            let room_encryption_request =
+                                matrix_sdk::api::r0::state::get_state_events_for_key::Request::new(
+                                    &resp.room_id,
+                                    EventType::RoomEncryption,
+                                    "",
+                                );
+
+                            if let Ok(room_encryption_response) =
+                                client.send(room_encryption_request, None).await
+                            {
+                                let deserialized = room_encryption_response
+                                    .content
+                                    .deserialize_content("m.room.encryption") // deserialize to the inner type
+                                    .unwrap();
+                                base_room.handle_state_event(&deserialized);
+                            }
+
+                            // Avatar
+                            let room_avatar_request =
+                                matrix_sdk::api::r0::state::get_state_events_for_key::Request::new(
+                                    &resp.room_id,
+                                    EventType::RoomAvatar,
+                                    "",
+                                );
+
+                            if let Ok(room_avatar_response) =
+                                client.send(room_avatar_request, None).await
+                            {
+                                let deserialized = room_avatar_response
+                                    .content
+                                    .deserialize_content("m.room.avatar") // deserialize to the inner type
+                                    .unwrap();
+                                base_room.handle_state_event(&deserialized);
+                            }
+
+                            // name
+                            let room_name_request =
+                                matrix_sdk::api::r0::state::get_state_events_for_key::Request::new(
+                                    &resp.room_id,
+                                    EventType::RoomName,
+                                    "",
+                                );
+
+                            if let Ok(room_name_response) =
+                                client.send(room_name_request, None).await
+                            {
+                                let deserialized = room_name_response
+                                    .content
+                                    .deserialize_content("m.room.name") // deserialize to the inner type
+                                    .unwrap();
+                                base_room.handle_state_event(&deserialized);
+                            }
+
+                            // create
+                            let room_create_request =
+                                matrix_sdk::api::r0::state::get_state_events_for_key::Request::new(
+                                    &resp.room_id,
+                                    EventType::RoomCreate,
+                                    "",
+                                );
+
+                            if let Ok(room_create_response) =
+                                client.send(room_create_request, None).await
+                            {
+                                let deserialized = room_create_response
+                                    .content
+                                    .deserialize_content("m.room.create") // deserialize to the inner type
+                                    .unwrap();
+                                base_room.handle_state_event(&deserialized);
+                            }
+
+                            // history
+                            let room_history_request =
+                                matrix_sdk::api::r0::state::get_state_events_for_key::Request::new(
+                                    &resp.room_id,
+                                    EventType::RoomHistoryVisibility,
+                                    "",
+                                );
+
+                            if let Ok(room_history_response) =
+                                client.send(room_history_request, None).await
+                            {
+                                let deserialized = room_history_response
+                                    .content
+                                    .deserialize_content("m.room.history_visibility") // deserialize to the inner type
+                                    .unwrap();
+                                base_room.handle_state_event(&deserialized);
+                            }
+
+                            // guest_access
+                            let room_guest_access_request =
+                                matrix_sdk::api::r0::state::get_state_events_for_key::Request::new(
+                                    &resp.room_id,
+                                    EventType::RoomGuestAccess,
+                                    "",
+                                );
+
+                            if let Ok(room_guest_access_response) =
+                                client.send(room_guest_access_request, None).await
+                            {
+                                let deserialized = room_guest_access_response
+                                    .content
+                                    .deserialize_content("m.room.guest_access") // deserialize to the inner type
+                                    .unwrap();
+                                base_room.handle_state_event(&deserialized);
+                            }
+
+                            // RoomJoinRules
+                            let room_join_rules_request =
+                                matrix_sdk::api::r0::state::get_state_events_for_key::Request::new(
+                                    &resp.room_id,
+                                    EventType::RoomJoinRules,
+                                    "",
+                                );
+
+                            if let Ok(room_join_rules_response) =
+                                client.send(room_join_rules_request, None).await
+                            {
+                                let deserialized = room_join_rules_response
+                                    .content
+                                    .deserialize_content("m.room.join_rules") // deserialize to the inner type
+                                    .unwrap();
+                                base_room.handle_state_event(&deserialized);
+                            }
+
+                            // Canonical Alias
+                            let room_canonical_alias_request =
+                                matrix_sdk::api::r0::state::get_state_events_for_key::Request::new(
+                                    &resp.room_id,
+                                    EventType::RoomCanonicalAlias,
+                                    "",
+                                );
+
+                            if let Ok(room_canonical_alias_response) =
+                                client.send(room_canonical_alias_request, None).await
+                            {
+                                let deserialized = room_canonical_alias_response
+                                    .content
+                                    .deserialize_content("m.room.canonical_alias") // deserialize to the inner type
+                                    .unwrap();
+                                base_room.handle_state_event(&deserialized);
+                            }
+
+                            // Topic
+                            let room_topic_request =
+                                matrix_sdk::api::r0::state::get_state_events_for_key::Request::new(
+                                    &resp.room_id,
+                                    EventType::RoomTopic,
+                                    "",
+                                );
+
+                            if let Ok(room_topic_response) =
+                                client.send(room_topic_request, None).await
+                            {
+                                let deserialized = room_topic_response
+                                    .content
+                                    .deserialize_content("m.room.topic") // deserialize to the inner type
+                                    .unwrap();
+                                base_room.handle_state_event(&deserialized);
+                            }
+
+                            // Tombstone
+                            let room_tombstone_request =
+                                matrix_sdk::api::r0::state::get_state_events_for_key::Request::new(
+                                    &resp.room_id,
+                                    EventType::RoomTombstone,
+                                    "",
+                                );
+
+                            if let Ok(room_tombstone_response) =
+                                client.send(room_tombstone_request, None).await
+                            {
+                                let deserialized = room_tombstone_response
+                                    .content
+                                    .deserialize_content("m.room.tombstone") // deserialize to the inner type
+                                    .unwrap();
+                                base_room.handle_state_event(&deserialized);
+                            }
+
+                            // RoomPowerLevels
+                            let room_power_levels_request =
+                                matrix_sdk::api::r0::state::get_state_events_for_key::Request::new(
+                                    &resp.room_id,
+                                    EventType::RoomPowerLevels,
+                                    "",
+                                );
+
+                            if let Ok(room_power_levels_response) =
+                                client.send(room_power_levels_request, None).await
+                            {
+                                let deserialized = room_power_levels_response
+                                    .content
+                                    .deserialize_content("m.room.power_levels") // deserialize to the inner type
+                                    .unwrap();
+                                base_room.handle_state_event(&deserialized);
+                            }
+
                             return Joined::new(client.clone(), base_room);
                         }
                     }

@@ -70,7 +70,7 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "2.4mb",
+                  "maximumWarning": "2.41mb",
                   "maximumError": "2.5mb"
                 },
                 {
