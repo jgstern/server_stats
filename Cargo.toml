@@ -46,16 +46,17 @@ opentelemetry-prometheus = "0.7.0"
 opentelemetry = { version = "0.14", features = ["rt-tokio"] }
 prometheus = "0.12.0"
 tracing-opentelemetry = "0.13.0"
+
 [dependencies.matrix-sdk]
-#git = "https://github.com/matrix-org/matrix-rust-sdk"
-#rev = "4c09c6272bb3636e20d99177357cd31b80a2c1bf"
-path = "../matrix-rust-sdk/matrix_sdk"
+git = "https://github.com/MTRNord/matrix-rust-sdk"
+branch = "MTRNord/server_stats_warp_upstream"
+#path = "../matrix-rust-sdk/matrix_sdk"
 features = ["appservice"]
 
 [dependencies.matrix-sdk-appservice]
-#git = "https://github.com/matrix-org/matrix-rust-sdk"
-#rev = "4c09c6272bb3636e20d99177357cd31b80a2c1bf"
-path = "../matrix-rust-sdk/matrix_sdk_appservice"
+git = "https://github.com/MTRNord/matrix-rust-sdk"
+branch = "MTRNord/server_stats_warp_upstream"
+#path = "../matrix-rust-sdk/matrix_sdk_appservice"
 features = ["warp"]
 
 [patch.crates-io]
