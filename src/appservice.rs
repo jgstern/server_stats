@@ -792,11 +792,11 @@ impl VoyagerBot {
                 r#"Hi! I am the server_stats Discovery bot by @mtrnord:nordgedanken.dev ! \n\n\n
                     What am I doing?\n\n I am a bot discovering matrix rooms. I am just looking for tasty room aliases :) I do not save your content!\n\n
                     How do I get removed?\n\n Its simple! Just ban me and I will not come back :)\n\n
-                    Where can I learn more?\n\n You can either look at my source over at https://git.nordgedanken.dev/MTRNord/server_stats/-/tree/main or join #server_stats:nordgedanken.dev :)"#,
+                    Where can I learn more?\n\n You can either look at my source over at https://github.com/MTRNord/server_stats or join #server_stats:nordgedanken.dev :)"#,
                 r#"<h1>Hi! I am the server_stats Discovery bot by <a href=\"https://matrix.to/#/@mtrnord:nordgedanken.dev\">MTRNord</a></h1>
                         <h2>What am I doing?</h2> I am a bot discovering matrix rooms. I am just looking for tasty room aliases :) I do not read the actual content or save it!
                         <h2>How do I get removed?</h2> Its simple! Just ban me and I will not come back :)
-                        <h2>Where can I learn more?</h2> You can either look at my source over at https://git.nordgedanken.dev/MTRNord/server_stats/-/tree/main or join <a href=\"https://matrix.to/#/#server_stats:nordgedanken.dev\">#server_stats:nordgedanken.dev</a> :)"#,
+                        <h2>Where can I learn more?</h2> You can either look at my source over at https://github.com/MTRNord/server_stats or join <a href=\"https://matrix.to/#/#server_stats:nordgedanken.dev\">#server_stats:nordgedanken.dev</a> :)"#,
             ));
             room.send(content, None).await.unwrap();
 
