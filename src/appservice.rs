@@ -780,7 +780,10 @@ impl VoyagerBot {
     }
 
     async fn handle_commands(msg_body: String, room: Joined) {
-        if msg_body.contains("!help") && room.is_direct() {
+        if (msg_body.contains("!help") && room.is_direct())
+            || (msg_body.contains("Server Stats Discoverer (traveler bot):")
+                && msg_body.contains("!help"))
+        {
             info!("Sending help");
             room.typing_notice(true)
                 .await
