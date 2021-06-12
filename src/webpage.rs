@@ -44,6 +44,10 @@ pub async fn run_server(
     let graph_two = graph.clone();
     info!("Path is: {} and {}", config.api.webpage_path, path);
 
+    let log = warp::log::custom(|info| {
+        info!("{} {} {}", info.method(), info.path(), info.status(),);
+    });
+
     let opt_servers_query = warp::query::<Servers>()
         .map(Some)
         .or_else(|_| async { Ok::<(Option<Servers>,), std::convert::Infallible>((None,)) });
@@ -92,6 +96,7 @@ pub async fn run_server(
             .or(warp::path::end().and(warp::get()).and(warp::fs::file(path))))
         .recover(handle_rejection)
         .with(warp::trace::request());
+    //.with(log);
     if let Ok(addr) = addr {
         let socket_addr = SocketAddr::new(addr, config.api.port);
         warp::serve(routes).run(socket_addr).await;

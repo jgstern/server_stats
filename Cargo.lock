@@ -1204,9 +1204,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.96"
+version = "0.2.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5600b4e6efc5421841a2138a6b082e07fe12f9aaa12783d50e5d13325b26b4fc"
+checksum = "12b8adadd720df158f4d70dfe7ccc6adb0472d7c55ca83445f6a5ab3e36f8fb6"
 
 [[package]]
 name = "linked-hash-map"
@@ -1291,6 +1291,7 @@ dependencies = [
  "matrix-sdk-common",
  "mime",
  "reqwest",
+ "ruma",
  "serde_json",
  "thiserror",
  "tokio",
@@ -1310,6 +1311,7 @@ dependencies = [
  "http",
  "matrix-sdk",
  "regex",
+ "ruma",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -1332,6 +1334,7 @@ dependencies = [
  "matrix-sdk-crypto",
  "pbkdf2",
  "rand",
+ "ruma",
  "serde",
  "serde_json",
  "sha2",
@@ -1373,6 +1376,7 @@ dependencies = [
  "matrix-sdk-common",
  "olm-rs",
  "pbkdf2",
+ "ruma",
  "serde",
  "serde_json",
  "sha2",
@@ -1545,9 +1549,9 @@ dependencies = [
 
 [[package]]
 name = "object"
-version = "0.25.2"
+version = "0.25.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8bc1d42047cf336f0f939c99e97183cf31551bf0f2865a2ec9c8d91fd4ffb5e"
+checksum = "a38f2be3697a57b4060074ff41b44c16870d916ad7877c17696e063257482bc7"
 dependencies = [
  "memchr",
 ]
@@ -2041,7 +2045,9 @@ dependencies = [
 
 [[package]]
 name = "ruma"
-version = "0.1.0"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20e5a6a79642e893e655aa955bd1f602871d7d56f491fb36e7fa87d2b062919e"
 dependencies = [
  "assign",
  "js_int",
@@ -2053,11 +2059,14 @@ dependencies = [
  "ruma-federation-api",
  "ruma-identifiers",
  "ruma-serde",
+ "ruma-signatures",
 ]
 
 [[package]]
 name = "ruma-api"
 version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51df85b3e2c4097abc60919864502083def5c3b12982b0c46f6431e5b1e1476d"
 dependencies = [
  "bytes",
  "http",
@@ -2073,6 +2082,8 @@ dependencies = [
 [[package]]
 name = "ruma-api-macros"
 version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe79932728de6a753163f4f30acfd70ebe4355c35fc638edb3f47c7cf47ab128"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -2083,6 +2094,8 @@ dependencies = [
 [[package]]
 name = "ruma-appservice-api"
 version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a775ffd3a9c9adc1745dce9f816ea81b297825d6263dfdbfd30887dbf698c6f"
 dependencies = [
  "ruma-api",
  "ruma-client-api",
@@ -2097,7 +2110,9 @@ dependencies = [
 
 [[package]]
 name = "ruma-client-api"
-version = "0.10.0"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84275808626b3411b0d40f6a8de0ed271920fe306c9e28f437244fba68a0a165"
 dependencies = [
  "assign",
  "bytes",
@@ -2116,7 +2131,9 @@ dependencies = [
 
 [[package]]
 name = "ruma-common"
-version = "0.5.1"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d6377f53bbe075901567d6b90c60f619ac792055ed763f7a7ebf920d0d7c443"
 dependencies = [
  "indexmap",
  "js_int",
@@ -2130,7 +2147,9 @@ dependencies = [
 
 [[package]]
 name = "ruma-events"
-version = "0.22.1"
+version = "0.22.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f3b0aa9e199d77a89a88721ea01b6fd0f2102eff3c4c745c9adff2bc5fe4f5e"
 dependencies = [
  "indoc",
  "js_int",
@@ -2144,7 +2163,9 @@ dependencies = [
 
 [[package]]
 name = "ruma-events-macros"
-version = "0.22.1"
+version = "0.22.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55a7f9697f093c404f0e797fe88eb4dd5d2a6d5505171e05f76caebf95f15a86"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -2155,6 +2176,8 @@ dependencies = [
 [[package]]
 name = "ruma-federation-api"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40fe42fd5951c688b5c7b0c32ed74d973d21c33ba31f9d64d40bf4f98c01eb48"
 dependencies = [
  "js_int",
  "ruma-api",
@@ -2168,7 +2191,9 @@ dependencies = [
 
 [[package]]
 name = "ruma-identifiers"
-version = "0.19.1"
+version = "0.19.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52982b72ea3a891a50c5b135cf025722ed1c8c6662dee801ced2d8ee71d601e0"
 dependencies = [
  "paste",
  "rand",
@@ -2181,7 +2206,9 @@ dependencies = [
 
 [[package]]
 name = "ruma-identifiers-macros"
-version = "0.19.1"
+version = "0.19.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7016a01269ec535a81e926ea2d0635768132187cac9cb579d88bf1eaf4b59ddb"
 dependencies = [
  "quote",
  "ruma-identifiers-validation",
@@ -2190,11 +2217,15 @@ dependencies = [
 
 [[package]]
 name = "ruma-identifiers-validation"
-version = "0.3.0"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8edeb165c4dcb8c93d1b7396b32fd5f52c5d9c7e7898ab87d772f824fe642f7c"
 
 [[package]]
 name = "ruma-serde"
 version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c888d69db1d5f134cbce7101f5610f1802966f359646ff48dbaf0f433d7bbd9f"
 dependencies = [
  "bytes",
  "form_urlencoded",
@@ -2208,11 +2239,28 @@ dependencies = [
 [[package]]
 name = "ruma-serde-macros"
 version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be418f3ee1593ebf1522d9ace1b1de0455bbcdd69c5d584c00d41e7717f8d0af"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "ruma-signatures"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7007ae39c0ae535438e5b8047e89d50d5dc1f0d6ed0f8c19c54c8ad1d814817"
+dependencies = [
+ "base64",
+ "ring",
+ "ruma-identifiers",
+ "ruma-serde",
+ "serde_json",
+ "tracing",
+ "untrusted",
 ]
 
 [[package]]
@@ -3335,7 +3383,7 @@ dependencies = [
 [[package]]
 name = "warp"
 version = "0.3.1"
-source = "git+https://github.com/seanmonstar/warp?rev=ab313984df336847cb7bf406fb1c3978baaf3785#ab313984df336847cb7bf406fb1c3978baaf3785"
+source = "git+https://github.com/seanmonstar/warp?rev=629405#629405816106f1d5cc041705d1d8fce2ca5ee330"
 dependencies = [
  "bytes",
  "futures",

@@ -14,8 +14,8 @@ use matrix_sdk::{
             member::{MemberEventContent, MembershipState},
             message::{MessageEventContent, MessageType, TextMessageEventContent},
         },
-        AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, EventType, RawExt,
-        StrippedStateEvent, SyncMessageEvent,
+        AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, EventType, RawExt, SyncMessageEvent,
+        SyncStateEvent,
     },
     identifiers::{EventId, RoomId, RoomIdOrAliasId, ServerName, UserId},
     room::{Joined, Room},
@@ -27,7 +27,6 @@ use regex::Regex;
 use std::{collections::BTreeMap, convert::TryFrom, time::Duration};
 use tokio::time::sleep;
 use tracing::{error, info, span, warn, Instrument, Level};
-// use matrix_sdk::events::SyncStateEvent;
 
 pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice {
     let homeserver_url = config.bot.clone().homeserver_url;
@@ -58,10 +57,7 @@ pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice 
         },
         LoopCtrl, SyncSettings,
     };
-    let client = appservice
-        .virtual_user_client("server_stats")
-        .await
-        .unwrap();
+    let client = appservice.get_cached_client(None).unwrap();
     tokio::spawn(async move {
         let mut filter = FilterDefinition::default();
         let mut room_filter = RoomFilter::default();
@@ -97,10 +93,7 @@ pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice 
         info!("Finished Sync");
     });*/
 
-    let client = appservice
-        .virtual_user_client("server_stats")
-        .await
-        .unwrap();
+    let client = appservice.get_cached_client(None).unwrap();
     crate::MATRIX_CLIENT.set(client);
 
     let event_handler = VoyagerBot::new(appservice.clone(), cache, config.clone());
@@ -146,7 +139,7 @@ impl VoyagerBot {
     async fn set_direct(
         client: Client,
         room: Room,
-        room_member: &StrippedStateEvent<MemberEventContent>,
+        room_member: &SyncStateEvent<MemberEventContent>,
     ) {
         if let Some(is_direct) = room_member.content.is_direct {
             if is_direct {
@@ -785,43 +778,46 @@ impl VoyagerBot {
 
         Ok(())
     }
+
+    async fn handle_commands(msg_body: String, room: Joined) {
+        if msg_body.contains("!help") && room.is_direct() {
+            info!("Sending help");
+            room.typing_notice(true)
+                .await
+                .expect("Can't send typing event");
+            let content = AnyMessageEventContent::RoomMessage(MessageEventContent::notice_html(
+                r#"Hi! I am the server_stats Discovery bot by @mtrnord:nordgedanken.dev ! \n\n\n
+                    What am I doing?\n\n I am a bot discovering matrix rooms. I am just looking for tasty room aliases :) I do not save your content!\n\n
+                    How do I get removed?\n\n Its simple! Just ban me and I will not come back :)\n\n
+                    Where can I learn more?\n\n You can either look at my source over at https://git.nordgedanken.dev/MTRNord/server_stats/-/tree/main or join #server_stats:nordgedanken.dev :)"#,
+                r#"<h1>Hi! I am the server_stats Discovery bot by <a href=\"https://matrix.to/#/@mtrnord:nordgedanken.dev\">MTRNord</a></h1>
+                        <h2>What am I doing?</h2> I am a bot discovering matrix rooms. I am just looking for tasty room aliases :) I do not read the actual content or save it!
+                        <h2>How do I get removed?</h2> Its simple! Just ban me and I will not come back :)
+                        <h2>Where can I learn more?</h2> You can either look at my source over at https://git.nordgedanken.dev/MTRNord/server_stats/-/tree/main or join <a href=\"https://matrix.to/#/#server_stats:nordgedanken.dev\">#server_stats:nordgedanken.dev</a> :)"#,
+            ));
+            room.send(content, None).await.unwrap();
+
+            room.typing_notice(false)
+                .await
+                .expect("Can't send typing event");
+        }
+    }
 }
 
 #[async_trait]
 impl EventHandler for VoyagerBot {
     #[tracing::instrument(skip(self, room, event))]
-    async fn on_stripped_state_member(
-        &self,
-        room: Room,
-        event: &StrippedStateEvent<MemberEventContent>,
-        _: Option<MemberEventContent>,
-    ) {
-        if !&event.state_key.contains("@server_stats:nordgedanken.dev") {
-            return;
-        }
-        info!("Got invite");
-
+    async fn on_room_member(&self, room: Room, event: &SyncStateEvent<MemberEventContent>) {
         if let MembershipState::Invite = event.content.membership {
+            if !&event.state_key.contains("@server_stats:nordgedanken.dev") {
+                return;
+            }
             let client = self.appservice.get_cached_client(None).unwrap();
             client.join_room_by_id(room.room_id()).await.unwrap();
             VoyagerBot::set_direct(client, room.clone(), event).await;
             info!("Successfully joined room {}", room.room_id());
         };
     }
-
-    /*async fn on_room_member(&self, room: Room, event: &SyncStateEvent<MemberEventContent>) {
-        if !&event.state_key.contains("@server_stats:nordgedanken.dev") {
-            return;
-        }
-        info!("Got invite");
-
-        if let MembershipState::Invite = event.content.membership {
-            let client = self.appservice.client(Some("server_stats")).await;
-            client.join_room_by_id(room.room_id()).await.unwrap();
-            VoyagerBot::set_direct(client, room.clone(), event).await;
-            info!("Successfully joined room {}", room.room_id());
-        };
-    }*/
 
     #[tracing::instrument(skip(event, room, self))]
     async fn on_room_message(&self, room: Room, event: &SyncMessageEvent<MessageEventContent>) {
@@ -841,30 +837,7 @@ impl EventHandler for VoyagerBot {
             };
             let event_id = event.event_id.clone();
 
-            //info!("msg_body: {}, is_direct: {}", msg_body, room.is_direct());
-            if msg_body.contains("!help") && room.is_direct() {
-                info!("Sending help");
-                room.typing_notice(true)
-                    .await
-                    .expect("Can't send typing event");
-                let content = AnyMessageEventContent::RoomMessage(
-                    MessageEventContent::notice_html(
-                        r#"Hi! I am the server_stats Discovery bot by @mtrnord:nordgedanken.dev ! \n\n\n
-                    What am I doing?\n\n I am a bot discovering matrix rooms. I am just looking for tasty room aliases :) I do not save your content!\n\n
-                    How do I get removed?\n\n Its simple! Just ban me and I will not come back :)\n\n
-                    Where can I learn more?\n\n You can either look at my source over at https://git.nordgedanken.dev/MTRNord/server_stats/-/tree/main or join #server_stats:nordgedanken.dev :)"#,
-                        r#"<h1>Hi! I am the server_stats Discovery bot by <a href=\"https://matrix.to/#/@mtrnord:nordgedanken.dev\">MTRNord</a></h1>
-                        <h2>What am I doing?</h2> I am a bot discovering matrix rooms. I am just looking for tasty room aliases :) I do not read the actual content or save it!
-                        <h2>How do I get removed?</h2> Its simple! Just ban me and I will not come back :)
-                        <h2>Where can I learn more?</h2> You can either look at my source over at https://git.nordgedanken.dev/MTRNord/server_stats/-/tree/main or join <a href=\"https://matrix.to/#/#server_stats:nordgedanken.dev\">#server_stats:nordgedanken.dev</a> :)"#,
-                    ),
-                );
-                room.send(content, None).await.unwrap();
-
-                room.typing_notice(false)
-                    .await
-                    .expect("Can't send typing event");
-            }
+            VoyagerBot::handle_commands(msg_body.clone(), room.clone()).await;
 
             // Handle message
             let client = self.appservice.get_cached_client(None).unwrap();
