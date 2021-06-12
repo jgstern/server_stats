@@ -32,7 +32,7 @@
 <br />
 <p align="center">
   <a href="https://github.com/MTRNord/server_stats">
-    <img src="assets/graph_big.png" alt="Logo" width="100" height="100">
+    <img src="webpage/src/assets/graph_big.png" alt="Logo" width="100" height="100">
   </a>
 
   <h3 align="center">Server_Stats Voyager Bot</h3>
