@@ -86,6 +86,9 @@ pub async fn run_server(
             .or(warp::path("faq")
                 .and(warp::path::end())
                 .and(warp::fs::file(path.clone())))
+            .or(warp::path("api")
+                .and(warp::path::end())
+                .and(warp::fs::file(path.clone())))
             .or(warp::path::end().and(warp::get()).and(warp::fs::file(path))))
         .recover(handle_rejection)
         .with(warp::trace::request());

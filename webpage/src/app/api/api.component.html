@@ -1,0 +1,37 @@
+<nz-layout class="layout">
+    <nz-header>
+        <div class="logo"></div>
+        <ul nz-menu nzTheme="dark" nzMode="horizontal">
+            <li nz-menu-item>
+                <a routerLink="/">Home</a>
+            </li>
+            <a nz-menu-item>
+                <a routerLink="/spaces">Space List</a>
+            </a>
+            <li nz-menu-item>
+                <a routerLink="/links">Link Finder</a>
+            </li>
+            <li nz-menu-item>
+                <a routerLink="/3d">3D Graph</a>
+            </li>
+            <li nz-menu-item>
+                <a routerLink="/faq">FAQ</a>
+            </li>
+            <li nz-menu-item nzSelected>
+                <a routerLink="/api" routerLinkActive="active">API Reference</a>
+            </li>
+            <li nz-menu-item><a href="https://github.com/MTRNord/server_stats">Github</a></li>
+        </ul>
+    </nz-header>
+    <nz-content>
+        <nz-breadcrumb>
+            <nz-breadcrumb-item>Home</nz-breadcrumb-item>
+            <nz-breadcrumb-item>API Reference</nz-breadcrumb-item>
+        </nz-breadcrumb>
+        <div class="inner-content">
+            <h1 nz-typography>API Reference</h1>
+            <div id="redoc"></div>
+        </div>
+    </nz-content>
+    <nz-footer>TODO</nz-footer>
+</nz-layout>

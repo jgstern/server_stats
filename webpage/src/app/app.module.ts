@@ -1,4 +1,4 @@
-import { NgModule } from '@angular/core';
+import { NO_ERRORS_SCHEMA, NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 
 import { AppRoutingModule } from './app-routing.module';
@@ -25,6 +25,7 @@ import { LinkyModule } from 'ngx-linky';
 import { ThreeDGraphComponent } from './three-d-graph/three-d-graph.component';
 import { FaqComponent } from './faq/faq.component';
 import { SpaceFinderComponent } from './space-finder/space-finder.component';
+import { ApiComponent } from './api/api.component';
 
 registerLocaleData(en);
 
@@ -35,7 +36,8 @@ registerLocaleData(en);
     RoomListComponent,
     ThreeDGraphComponent,
     FaqComponent,
-    SpaceFinderComponent
+    SpaceFinderComponent,
+    ApiComponent
   ],
   imports: [
     BrowserModule,
@@ -55,6 +57,6 @@ registerLocaleData(en);
     NzAlertModule
   ],
   providers: [{ provide: NZ_I18N, useValue: en_US }],
-  bootstrap: [AppComponent]
+  bootstrap: [AppComponent], schemas: [NO_ERRORS_SCHEMA]
 })
 export class AppModule { }

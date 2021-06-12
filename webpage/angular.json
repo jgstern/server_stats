@@ -41,15 +41,18 @@
               }
             ],
             "styles": [
+              "node_modules/ng-zorro-antd/ng-zorro-antd.min.css",
               "src/theme.less",
-              "src/styles.scss",
-              "node_modules/ng-zorro-antd/ng-zorro-antd.min.css"
+              "src/styles.scss"
             ],
-            "scripts": [],
+            "scripts": [
+              "node_modules/redoc/bundles/redoc.standalone.js"
+            ],
             "allowedCommonJsDependencies": [
               "tinycolor2",
               "ngraph.forcelayout",
-              "ngraph.graph"
+              "ngraph.graph",
+              "redoc"
             ]
           },
           "configurations": {
@@ -70,8 +73,8 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "2.41mb",
-                  "maximumError": "2.5mb"
+                  "maximumWarning": "3.37mb",
+                  "maximumError": "3.4mb"
                 },
                 {
                   "type": "anyComponentStyle",

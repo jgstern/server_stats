@@ -1,0 +1,178 @@
+---
+openapi: 3.0.2
+info:
+  title: Server_Stats API
+  version: 0.1.0
+  contact:
+    name: MTRNord
+    url: https://serverstats.nordgedanken.dev/faq
+    email: mtrnord@nordgedanken.dev
+  license:
+    name: GNU AGPLv3
+    url: https://www.gnu.org/licenses/agpl.txt
+servers:
+- url: https://serverstats.nordgedanken.dev/
+  description: ""
+paths:
+  /relations:
+    summary: Room Relations
+    get:
+      responses:
+        "200":
+          $ref: '#/components/responses/RelationsResponse'
+      deprecated: false
+      summary: Get the room relations
+  /servers:
+    get:
+      parameters:
+      - examples:
+          include_members:
+            value: "false"
+        name: include_members
+        description: Defined if you want the servers of members included as well.
+        schema:
+          type: boolean
+        in: query
+        required: false
+      responses:
+        "200":
+          $ref: '#/components/responses/ServersResponse'
+      deprecated: false
+components:
+  schemas:
+    Relations:
+      title: Root Type for Relations
+      description: ""
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              room_id:
+                type: string
+              name:
+                type: string
+              alias:
+                type: string
+              avatar:
+                type: string
+              members:
+                format: int32
+                type: integer
+              topic:
+                type: string
+              weight:
+                format: int32
+                type: integer
+              incoming_links:
+                format: int32
+                type: integer
+              outgoing_links:
+                format: int32
+                type: integer
+              is_space:
+                type: boolean
+        links:
+          type: array
+          items:
+            type: object
+            properties:
+              source:
+                type: string
+              target:
+                type: string
+              value:
+                format: int32
+                type: integer
+      example:
+        nodes:
+        - id: zzNhtqtTKvKoKmplCDE8GQ==
+          room_id: '!room:server'
+          name: Example Room
+          alias: '#example:server'
+          avatar: mxc://server/media
+          members: 231
+          topic: An example topic
+          weight: 2
+          incoming_links: 1
+          outgoing_links: 1
+          is_space: false
+        - id: zxCnSRqXsaRrLP4HuVLtXw==
+          room_id: '!room2:server'
+          name: Example Room2
+          alias: '#example2:server'
+          avatar: mxc://server/media2
+          members: 231
+          topic: An example topic
+          weight: 2
+          incoming_links: 1
+          outgoing_links: 1
+          is_space: false
+        links:
+        - source: zzNhtqtTKvKoKmplCDE8GQ==
+          target: zxCnSRqXsaRrLP4HuVLtXw==
+          value: 1
+    Servers:
+      title: Root Type for Servers
+      description: ""
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            type: string
+      example:
+        servers:
+        - example.com
+        - anotherexample.com
+  responses:
+    RelationsResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Relations'
+          examples:
+            Relations example:
+              value:
+                nodes:
+                - id: zzNhtqtTKvKoKmplCDE8GQ==
+                  room_id: '!room:server'
+                  name: Example Room
+                  alias: '#example:server'
+                  avatar: mxc://server/media
+                  members: 231
+                  topic: An example topic
+                  weight: 2
+                  incoming_links: 1
+                  outgoing_links: 1
+                  is_space: false
+                - id: zxCnSRqXsaRrLP4HuVLtXw==
+                  room_id: '!room2:server'
+                  name: Example Room2
+                  alias: '#example2:server'
+                  avatar: mxc://server/media2
+                  members: 231
+                  topic: An example topic
+                  weight: 2
+                  incoming_links: 1
+                  outgoing_links: 1
+                  is_space: false
+                links:
+                - source: zzNhtqtTKvKoKmplCDE8GQ==
+                  target: zxCnSRqXsaRrLP4HuVLtXw==
+                  value: 1
+      description: ""
+    ServersResponse:
+      content:
+        application/json:
+          examples:
+            ServersExample:
+              value:
+                servers:
+                - example.com
+                - anotherexample.com
+      description: ""

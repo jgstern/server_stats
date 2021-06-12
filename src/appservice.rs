@@ -37,11 +37,12 @@ pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice 
     let mut appservice = Appservice::new_with_config(
         homeserver_url.as_str(),
         server_name.as_str(),
-        registration,
+        registration.clone(),
         ClientConfig::default()
             .store_path("./store/")
             .request_config(
                 RequestConfig::default()
+                    .assert_identity()
                     .disable_retry()
                     .retry_timeout(Duration::from_secs(30))
                     .timeout(Duration::from_secs(30)),
@@ -57,7 +58,10 @@ pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice 
         },
         LoopCtrl, SyncSettings,
     };
-    let client = appservice.client(Some("server_stats")).await;
+    let client = appservice
+        .virtual_user_client("server_stats")
+        .await
+        .unwrap();
     tokio::spawn(async move {
         let mut filter = FilterDefinition::default();
         let mut room_filter = RoomFilter::default();
@@ -74,13 +78,14 @@ pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice 
         room_filter.timeline = timeline_event_filter;
         filter.room = room_filter;
         let filter_id = client
-            .get_or_upload_filter("state_reload", filter)
+            .get_or_upload_filter("state_reload2", filter)
             .await
             .unwrap();
 
         let sync_settings = SyncSettings::new()
             .filter(Filter::FilterId(&filter_id))
             .full_state(true)
+            //.token(clone_registration.as_token.clone())
             .timeout(Duration::from_secs(5 * 60));
         client
             .sync_with_callback(sync_settings, |response| async move {

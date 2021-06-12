@@ -17,6 +17,9 @@
             <li nz-menu-item>
                 <a routerLink="/faq">FAQ</a>
             </li>
+            <li nz-menu-item>
+                <a routerLink="/api">API Reference</a>
+            </li>
             <li nz-menu-item><a href="https://github.com/MTRNord/server_stats">Github</a></li>
         </ul>
     </nz-header>
@@ -37,7 +40,8 @@
             </nz-input-group>
             <br /><br />
             <ngx-datatable #table class="material" [rows]="this.rows" [columns]="columns" [headerHeight]="40"
-                [summaryRow]="false" [footerHeight]="40" [limit]="10" rowHeight="auto" [columnMode]="ColumnMode.force">
+                [summaryRow]="false" [footerHeight]="40" [limit]="10" rowHeight="auto" [columnMode]="ColumnMode.force"
+                [sorts]="[{ prop: 'members', dir: 'desc' }]">
             </ngx-datatable>
         </div>
     </nz-content>
