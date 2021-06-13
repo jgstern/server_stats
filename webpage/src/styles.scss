@@ -19,7 +19,6 @@
 
 html,
 body {
-    height: 100%;
     margin: 0;
     padding: 0;
 }
@@ -40,6 +39,23 @@ body {
     box-shadow: 1px 1px 8px 1px rgba(0, 0, 0, 0.05) !important;
     border-radius: 5px;
     margin: 25px;
+}
+
+@media (max-width: 768px) {
+    .inner-content {
+        margin: 5px !important;
+        border-radius: 0 !important;
+    }
+    mat-cell,
+    mat-header-cell,
+    mat-footer-cell {
+        min-width: 100px;
+    }
+    mat-row,
+    mat-header-row,
+    mat-footer-row {
+        align-items: start !important;
+    }
 }
 
 .logo {
@@ -67,15 +83,18 @@ body {
     height: 100vh;
 }
 
-table {
-    width: 100%;
-}
-.mat-drawer-container,
-.mat-drawer-content {
-    display: inline !important;
-}
-
-.mat-cell > p {
+.mat-cell > span {
     margin: 5px;
     word-break: break-word;
 }
+
+.mat-table {
+    width: 100%;
+}
+
+@import "~bootstrap/scss/functions";
+@import "~bootstrap/scss/variables";
+@import "~bootstrap/scss/mixins";
+@import "~bootstrap/scss/utilities";
+
+@import "~bootstrap/scss/tables";
