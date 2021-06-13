@@ -10,15 +10,7 @@ import en from '@angular/common/locales/en';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-import { NzLayoutModule } from 'ng-zorro-antd/layout';
-import { NzBreadCrumbModule } from 'ng-zorro-antd/breadcrumb';
-import { NzMenuModule } from 'ng-zorro-antd/menu';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
-import { NzInputModule } from 'ng-zorro-antd/input';
-import { NzIconModule } from 'ng-zorro-antd/icon';
-import { NzSelectModule } from 'ng-zorro-antd/select';
-import { NzTypographyModule } from 'ng-zorro-antd/typography';
-import { NzAlertModule } from 'ng-zorro-antd/alert';
 import { LinkFinderComponent } from './link-finder/link-finder.component';
 import { RoomListComponent } from './room-list/room-list.component';
 import { LinkyModule } from 'ngx-linky';
@@ -26,7 +18,18 @@ import { ThreeDGraphComponent } from './three-d-graph/three-d-graph.component';
 import { FaqComponent } from './faq/faq.component';
 import { SpaceFinderComponent } from './space-finder/space-finder.component';
 import { ApiComponent } from './api/api.component';
-
+import { MatToolbarModule } from '@angular/material/toolbar';
+import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatListModule } from '@angular/material/list';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
+import { MatInputModule } from '@angular/material/input';
+import { FlexLayoutModule } from '@angular/flex-layout';
+import { MatTableModule } from '@angular/material/table';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSortModule } from '@angular/material/sort';
 registerLocaleData(en);
 
 @NgModule({
@@ -45,16 +48,20 @@ registerLocaleData(en);
     FormsModule,
     HttpClientModule,
     BrowserAnimationsModule,
-    NzLayoutModule,
-    NzBreadCrumbModule,
-    NzMenuModule,
     NgxDatatableModule,
-    NzInputModule,
-    NzIconModule,
-    NzSelectModule,
-    NzTypographyModule,
     LinkyModule,
-    NzAlertModule
+    MatIconModule,
+    MatListModule,
+    MatToolbarModule,
+    MatSidenavModule,
+    MatButtonModule,
+    FlexLayoutModule,
+    MatFormFieldModule,
+    MatSelectModule,
+    MatInputModule,
+    MatTableModule,
+    MatProgressSpinnerModule,
+    MatSortModule
   ],
   providers: [{ provide: NZ_I18N, useValue: en_US }],
   bootstrap: [AppComponent], schemas: [NO_ERRORS_SCHEMA]

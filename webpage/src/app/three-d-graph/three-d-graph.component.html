@@ -1,49 +1,59 @@
-<nz-layout class="layout">
-    <nz-header>
-        <div class="logo"></div>
-        <ul nz-menu nzTheme="dark" nzMode="horizontal">
-            <li nz-menu-item>
-                <a routerLink="/">Home</a>
-            </li>
-            <a nz-menu-item>
-                <a routerLink="/spaces">Space List</a>
-            </a>
-            <li nz-menu-item>
-                <a routerLink="/links">Link Finder</a>
-            </li>
-            <a nz-menu-item nzSelected>
-                <a routerLink="/3d" routerLinkActive="active">3D Graph</a>
-            </a>
-            <li nz-menu-item>
-                <a routerLink="/faq">FAQ</a>
-            </li>
-            <li nz-menu-item>
-                <a routerLink="/api">API Reference</a>
-            </li>
-            <li nz-menu-item><a href="https://github.com/MTRNord/server_stats">Github</a></li>
-        </ul>
-    </nz-header>
-    <nz-content class="in-graph">
-        <div class="wrapper" #wrapper>
-            <div id="graph" #graph></div>
-            <div id="info">
-                <p id="room_count">Rooms: {{data?.nodes?.length}}</p>
-                <div class="break"></div>
-                <p id="link_count">Links: {{data?.links?.length}}</p>
-            </div>
-            <div id="sidebar" #sidebar>
-                <div id="close" #close>×</div>
-                <div id="content">
-                    <div id="top">
-                        <p id="header">{{sidebar_header}}</p>
-                        <img id="avatar" src="{{avatar}}" />
+<mat-toolbar color="primary">
+    <mat-toolbar-row>
+        <button mat-icon-button (click)="sidenav.toggle()" fxShow="true" fxHide.gt-sm>
+            <mat-icon>menu</mat-icon>
+        </button>
+        <img class="logo" src="/assets/graph_icon.png">
+        <span>Matrix Server Stats</span>
+        <span class="spacer"></span>
+        <div fxShow="true" fxHide.lt-md="true">
+            <!-- The following menu items will be hidden on both SM and XS screen sizes -->
+            <a routerLink="/" mat-button>Home</a>
+            <a routerLink="/spaces" mat-button>Space List</a>
+            <a routerLink="/links" mat-button>Link Finder</a>
+            <a routerLink="/3d" routerLinkActive="active" mat-button>3D Graph</a>
+            <a routerLink="/faq" mat-button>FAQ</a>
+            <a routerLink="/api" mat-button>API Reference</a>
+            <a href="https://github.com/MTRNord/server_stats" mat-button>Github</a>
+        </div>
+    </mat-toolbar-row>
+</mat-toolbar>
+<mat-sidenav-container fxFlexFill class="container">
+    <mat-sidenav #sidenav fxLayout="column">
+        <div fxLayout="column">
+            <a (click)="sidenav.toggle()" href="#" mat-button>Close</a>
+            <a routerLink="/" mat-button>Home</a>
+            <a routerLink="/spaces" mat-button>Space List</a>
+            <a routerLink="/links" mat-button>Link Finder</a>
+            <a routerLink="/3d" routerLinkActive="active" mat-button>3D Graph</a>
+            <a routerLink="/faq" mat-button>FAQ</a>
+            <a routerLink="/api" mat-button>API Reference</a>
+            <a href="https://github.com/MTRNord/server_stats" mat-button>Github</a>
+        </div>
+    </mat-sidenav>
+    <mat-sidenav-content fxFlexFill>
+        <div class="in-graph">
+            <div class="wrapper" #wrapper>
+                <div id="graph" #graph></div>
+                <div id="info">
+                    <p id="room_count">Rooms: {{data?.nodes?.length}}</p>
+                    <div class="break"></div>
+                    <p id="link_count">Links: {{data?.links?.length}}</p>
+                </div>
+                <div id="sidebar" #sidebar>
+                    <div id="close" #close>×</div>
+                    <div id="content">
+                        <div id="top">
+                            <p id="header">{{sidebar_header}}</p>
+                            <img id="avatar" src="{{avatar}}" />
+                        </div>
+                        <hr id="divider" />
+                        <p id="description" [innerHTML]="sidebar_description"></p>
+                        <p id="link" #link>Join room:&nbsp;<a rel="noopener noreferrer" id="alias_link" target='_blank'
+                                href="{{alias_link_href}}">{{alias_link}}</a></p>
                     </div>
-                    <hr id="divider" />
-                    <p id="description" [innerHTML]="sidebar_description"></p>
-                    <p id="link" #link>Join room:&nbsp;<a rel="noopener noreferrer" id="alias_link" target='_blank'
-                            href="{{alias_link_href}}">{{alias_link}}</a></p>
                 </div>
             </div>
         </div>
-    </nz-content>
-</nz-layout>
+    </mat-sidenav-content>
+</mat-sidenav-container>

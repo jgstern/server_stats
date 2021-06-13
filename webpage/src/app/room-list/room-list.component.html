@@ -1,53 +1,130 @@
-<nz-layout class="layout">
-    <nz-header>
-        <div class="logo"></div>
-        <ul nz-menu nzTheme="dark" nzMode="horizontal">
-            <li nz-menu-item nzSelected>
-                <a routerLink="/" routerLinkActive="active">Home</a>
-            </li>
-            <a nz-menu-item>
-                <a routerLink="/spaces">Space List</a>
-            </a>
-            <a nz-menu-item>
-                <a routerLink="/links">Link Finder</a>
-            </a>
-            <li nz-menu-item>
-                <a routerLink="/3d">3D Graph</a>
-            </li>
-            <li nz-menu-item>
-                <a routerLink="/faq">FAQ</a>
-            </li>
-            <li nz-menu-item>
-                <a routerLink="/api">API Reference</a>
-            </li>
-            <li nz-menu-item><a href="https://github.com/MTRNord/server_stats">Github</a></li>
-        </ul>
-    </nz-header>
-    <nz-content>
-        <nz-breadcrumb>
-            <nz-breadcrumb-item>Home</nz-breadcrumb-item>
-            <nz-breadcrumb-item>Room List</nz-breadcrumb-item>
-        </nz-breadcrumb>
+<mat-toolbar color="primary">
+    <mat-toolbar-row>
+        <button mat-icon-button (click)="sidenav.toggle()" fxShow="true" fxHide.gt-sm>
+            <mat-icon>menu</mat-icon>
+        </button>
+        <img class="logo" src="/assets/graph_icon.png">
+        <span>Matrix Server Stats</span>
+        <span class="spacer"></span>
+        <div fxShow="true" fxHide.lt-md="true">
+            <!-- The following menu items will be hidden on both SM and XS screen sizes -->
+            <a routerLink="/" routerLinkActive="active" mat-button>Home</a>
+            <a routerLink="/spaces" mat-button>Space List</a>
+            <a routerLink="/links" mat-button>Link Finder</a>
+            <a routerLink="/3d" mat-button>3D Graph</a>
+            <a routerLink="/faq" mat-button>FAQ</a>
+            <a routerLink="/api" mat-button>API Reference</a>
+            <a href="https://github.com/MTRNord/server_stats" mat-button>Github</a>
+        </div>
+    </mat-toolbar-row>
+</mat-toolbar>
+<mat-sidenav-container fxFlexFill class="container">
+    <mat-sidenav #sidenav fxLayout="column">
+        <div fxLayout="column">
+            <a (click)="sidenav.toggle()" href="#" mat-button>Close</a>
+            <a routerLink="/" routerLinkActive="active" mat-button>Home</a>
+            <a routerLink="/spaces" mat-button>Space List</a>
+            <a routerLink="/links" mat-button>Link Finder</a>
+            <a routerLink="/3d" mat-button>3D Graph</a>
+            <a routerLink="/faq" mat-button>FAQ</a>
+            <a routerLink="/api" mat-button>API Reference</a>
+            <a href="https://github.com/MTRNord/server_stats" mat-button>Github</a>
+        </div>
+    </mat-sidenav>
+    <mat-sidenav-content fxFlexFill>
         <div class="inner-content">
-            <h1 nz-typography>Room List</h1>
+            <h1>Room List</h1>
             <nz-alert nzType="info" nzMessage="Why is the table empty?"
                 nzDescription="Please be patient. The initial loading of the table can take multiple seconds. Make sure to wait for it to complete before searching"
                 nzShowIcon></nz-alert><br />
-            <nz-input-group nzCompact>
-                <nz-select [ngModel]="'name'" (ngModelChange)="updateSelection($event)">
-                    <nz-option [nzLabel]="'Roomname'" [nzValue]="'name'"></nz-option>
-                    <nz-option [nzLabel]="'Alias'" [nzValue]="'alias'"></nz-option>
-                    <nz-option [nzLabel]="'Topic'" [nzValue]="'topic'"></nz-option>
-                </nz-select>
-                <input type="text" nz-input placeholder="Type to filter the name column..."
-                    (keyup)="updateFilter($event)" style="width:90%;" />
-            </nz-input-group>
+            <div fxLayout="row">
+                <mat-form-field class="search-type">
+                    <mat-label>Search type selection</mat-label>
+                    <mat-select [(ngModel)]="filterColumn">
+                        <mat-option value="name">Roomname</mat-option>
+                        <mat-option value="alias">Alias</mat-option>
+                        <mat-option value="topic">Topic</mat-option>
+                    </mat-select>
+                </mat-form-field>
+                <mat-form-field class="full-width">
+                    <mat-label>Filter the {{ filterColumn }} column</mat-label>
+                    <input matInput type="text" placeholder="Type to filter the {{ filterColumn }} column..."
+                        (keyup)="updateFilter($event)" #input>
+                </mat-form-field>
+            </div>
             <br /><br />
-            <ngx-datatable #table class="material" [rows]="this.rows" [columns]="columns" [headerHeight]="40"
-                [summaryRow]="false" [footerHeight]="40" [limit]="10" rowHeight="auto" [columnMode]="ColumnMode.force"
-                [sorts]="[{ prop: 'members', dir: 'desc' }]">
-            </ngx-datatable>
+            <div class="table-container mat-elevation-z8">
+                <div class="table-loading-shade" *ngIf="isLoadingResults">
+                    <mat-spinner *ngIf="isLoadingResults"></mat-spinner>
+                </div>
+                <div class="table-inner-container">
+                    <table mat-table [dataSource]="dataSource" matSort matSortActive="members" matSortDirection="desc">
+
+                        <ng-container matColumnDef="name">
+                            <mat-header-cell mat-header-cell *matHeaderCellDef mat-sort-header> Roomname
+                            </mat-header-cell>
+                            <mat-cell mat-cell *matCellDef="let element">
+                                <p>{{element.name}}</p>
+                            </mat-cell>
+                        </ng-container>
+
+                        <ng-container matColumnDef="alias">
+                            <mat-header-cell mat-header-cell *matHeaderCellDef mat-sort-header> Alias
+                            </mat-header-cell>
+                            <mat-cell mat-cell *matCellDef="let element">
+                                <p [innerHTML]="element.alias"></p>
+                            </mat-cell>
+                        </ng-container>
+
+                        <ng-container matColumnDef="room_id">
+                            <mat-header-cell mat-header-cell *matHeaderCellDef mat-sort-header> Room ID
+                            </mat-header-cell>
+                            <mat-cell mat-cell *matCellDef="let element">
+                                <p>{{element.room_id}}</p>
+                            </mat-cell>
+                        </ng-container>
+
+                        <ng-container matColumnDef="topic">
+                            <mat-header-cell mat-header-cell *matHeaderCellDef mat-sort-header> Topic
+                            </mat-header-cell>
+                            <mat-cell mat-cell *matCellDef="let element">
+                                <p [innerHTML]="element.topic"></p>
+                            </mat-cell>
+                        </ng-container>
+                        <ng-container matColumnDef="members">
+                            <mat-header-cell mat-header-cell *matHeaderCellDef mat-sort-header> Member
+                                Count </mat-header-cell>
+                            <mat-cell mat-cell *matCellDef="let element">
+                                <p>{{element.members}}</p>
+                            </mat-cell>
+                        </ng-container>
+                        <ng-container matColumnDef="incoming_links">
+                            <mat-header-cell mat-header-cell *matHeaderCellDef mat-sort-header> Incoming Links
+                            </mat-header-cell>
+                            <mat-cell mat-cell *matCellDef="let element">
+                                <p>{{element.incoming_links}}</p>
+                            </mat-cell>
+                        </ng-container>
+                        <ng-container matColumnDef="outgoing_links">
+                            <mat-header-cell mat-header-cell *matHeaderCellDef mat-sort-header> Outgoing Links
+                            </mat-header-cell>
+                            <mat-cell mat-cell *matCellDef="let element">
+                                <p>{{element.outgoing_links}}</p>
+                            </mat-cell>
+                        </ng-container>
+
+                        <mat-header-row *matHeaderRowDef="displayedColumns"></mat-header-row>
+                        <mat-row mat-row *matRowDef="let row; columns: displayedColumns;"></mat-row>
+
+                        <!-- Row shown when there is no matching data. -->
+                        <mat-header-row class="mat-row" *matNoDataRow></mat-header-row>
+                        <mat-row class="mat-cell" colspan="4">No data matching the filter "{{input.value}}"</mat-row>
+                    </table>
+                    <mat-paginator [length]="resultsLength" [pageSizeOptions]="[5, 10, 20]" showFirstLastButtons>
+                    </mat-paginator>
+                </div>
+            </div>
+
         </div>
-    </nz-content>
-    <nz-footer>TODO</nz-footer>
-</nz-layout>
+    </mat-sidenav-content>
+</mat-sidenav-container>
