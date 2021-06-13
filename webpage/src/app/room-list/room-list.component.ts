@@ -1,7 +1,6 @@
 import { Component, AfterViewInit, ViewChild, OnInit } from '@angular/core';
 import Autolinker from 'autolinker';
 import { ApiService, Row } from '../api.service';
-import Fuse from 'fuse.js';
 import { MatTableDataSource } from '@angular/material/table';
 import { MatPaginator } from '@angular/material/paginator';
 import { MatSort } from '@angular/material/sort';

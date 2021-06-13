@@ -1,7 +1,8 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
-import { ColumnMode, DatatableComponent } from '@swimlane/ngx-datatable';
+import { AfterViewInit, Component, OnInit, ViewChild } from '@angular/core';
+import { MatPaginator } from '@angular/material/paginator';
+import { MatSort } from '@angular/material/sort';
+import { MatTableDataSource } from '@angular/material/table';
 import Autolinker from 'autolinker';
-import Fuse from 'fuse.js';
 import { ApiService, Row } from '../api.service';
 
 @Component({
@@ -9,19 +10,35 @@ import { ApiService, Row } from '../api.service';
   templateUrl: './space-finder.component.html',
   styleUrls: ['./space-finder.component.scss']
 })
-export class SpaceFinderComponent implements OnInit {
-  @ViewChild(DatatableComponent)
-  table!: DatatableComponent;
+export class SpaceFinderComponent implements OnInit, AfterViewInit {
 
   title = 'server-stats';
   filterColumn = 'name';
-  rows: Row[] = [];
-  temp: Row[] = [];
-  columns = [{ prop: 'name', name: 'Roomname' }, { name: 'Alias' }, { prop: 'room_id', name: 'Room ID' }, { prop: 'members', name: 'Member Count' }, { prop: 'incoming_links', name: 'Incoming Links' }];
-  ColumnMode = ColumnMode;
-  first = true;
+  private rows: Row[] = [];
+  dataSource = new MatTableDataSource<Row>([]);
+  displayedColumns: string[] = ['name', 'alias', 'room_id', 'topic', 'members', 'incoming_links', 'outgoing_links'];
+  private first = true;
+  resultsLength = 0;
+  isLoadingResults = true;
+  private filterValues = {
+    name: '',
+    alias: '',
+    topic: '',
+  };
 
-  constructor(public api: ApiService) { }
+  @ViewChild(MatPaginator, { static: true })
+  private paginator!: MatPaginator;
+  @ViewChild(MatSort, { static: true })
+  private sort!: MatSort;
+
+  constructor(public api: ApiService) {
+    this.dataSource.filterPredicate = this.tableFilter();
+  }
+
+  ngAfterViewInit(): void {
+    this.dataSource.paginator = this.paginator;
+    this.dataSource.sort = this.sort;
+  }
 
   ngOnInit(): void {
     if (this.api.data != null && this.api.data != undefined) {
@@ -30,7 +47,6 @@ export class SpaceFinderComponent implements OnInit {
         const nodes = data.nodes.filter(room => {
           return room.is_space;
         });
-        this.temp = nodes;
         if (this.first) {
           this.rows = nodes;
           this.rows = this.rows.map(data => {
@@ -44,6 +60,11 @@ export class SpaceFinderComponent implements OnInit {
 
           });
           this.first = false;
+          this.resultsLength = this.rows.length;
+          this.isLoadingResults = false;
+          this.dataSource.data = this.rows;
+          this.dataSource.sort = this.sort;
+          this.dataSource.paginator = this.paginator;
         }
       }
 
@@ -53,7 +74,6 @@ export class SpaceFinderComponent implements OnInit {
         const nodes = data.nodes.filter(room => {
           return room.is_space;
         });
-        this.temp = nodes;
         if (this.first) {
           this.rows = nodes.filter(room => {
             return room.is_space;
@@ -69,6 +89,11 @@ export class SpaceFinderComponent implements OnInit {
 
           });
           this.first = false;
+          this.resultsLength = this.rows.length;
+          this.isLoadingResults = false;
+          this.dataSource.data = this.rows;
+          this.dataSource.sort = this.sort;
+          this.dataSource.paginator = this.paginator;
         }
       }
     })
@@ -86,55 +111,31 @@ export class SpaceFinderComponent implements OnInit {
     this.filterColumn = value.toLowerCase();
   }
 
-  updateFilter(event: any) {
-    const val = event.target.value.toLowerCase();
-    const filterColumn = this.filterColumn;
-    // filter our data
-    const indexName = filterColumn as "id" | "name" | "alias" | "avatar" | "topic" | "weight";
-    const options = {
-      includeScore: true,
-      // Search in `author` and in `tags` array
-      keys: [indexName]
-    };
-
-    const fuse = new Fuse(this.temp, options);
-
-    const result = fuse.search(val);
-    if (result.length == 0) {
-      if (this.temp != null) {
-        this.rows = this.temp.map(data => {
-          if (data.updated === false || data.updated == null) {
-            const alias_server = data.alias.split(":")[1];
-            data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
-            data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
-            data.updated = true;
-          }
-          return data;
-
-        });
-      }
-      return;
+  updateFilter(event: Event) {
+    const filterValue = (event.target as HTMLInputElement).value;
+    if (this.filterColumn == "name") {
+      this.filterValues.name = filterValue.trim().toLowerCase();
+      this.dataSource.filter = JSON.stringify(this.filterValues);
+    } else if (this.filterColumn == "alias") {
+      this.filterValues.alias = filterValue.trim().toLowerCase();
+      this.dataSource.filter = JSON.stringify(this.filterValues);
+    } else if (this.filterColumn == "topic") {
+      this.filterValues.topic = filterValue.trim().toLowerCase();
+      this.dataSource.filter = JSON.stringify(this.filterValues);
     }
+    if (this.dataSource.paginator) {
+      this.dataSource.paginator.firstPage();
+    }
+  }
 
-    result.sort((a, b) => {
-      // Compare the 2 scores
-      if (a.score!! < b.score!!) return -1;
-      if (a.score!! > b.score!!) return 1;
-      return 0;
-    });
 
-    const temp = result.map(e => e.item);
-    // update the rows
-    this.rows = temp.map(data => {
-      if (data.updated === false || data.updated == null) {
-        const alias_server = data.alias.split(":")[1];
-        data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
-        data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
-        data.updated = true;
-      }
-      return data;
-    });
-    // Whenever the filter changes, always go back to the first page
-    this.table.offset = 0;
+  tableFilter(): (data: any, filter: string) => boolean {
+    let filterFunction = (data: { name: string; alias: string; topic: string; }, filter: string) => {
+      let searchTerms = JSON.parse(filter);
+      return data.name.toLowerCase().indexOf(searchTerms.name) !== -1
+        && data.alias.toLowerCase().indexOf(searchTerms.alias) !== -1
+        && data.topic.toLowerCase().indexOf(searchTerms.topic) !== -1;
+    }
+    return filterFunction;
   }
 }

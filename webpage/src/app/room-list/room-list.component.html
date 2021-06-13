@@ -3,7 +3,8 @@
         <button mat-icon-button (click)="sidenav.toggle()" fxShow="true" fxHide.gt-sm>
             <mat-icon>menu</mat-icon>
         </button>
-        <img class="logo" src="/assets/graph_icon.png">
+        <img class="logo" src="/assets/graph_icon.png"
+            alt="Server Stats Logo. A graph with a lot of nodes as a sphere.">
         <span>Matrix Server Stats</span>
         <span class="spacer"></span>
         <div fxShow="true" fxHide.lt-md="true">
@@ -120,7 +121,8 @@
                         <mat-header-row class="mat-row" *matNoDataRow></mat-header-row>
                         <mat-row class="mat-cell" colspan="4">No data matching the filter "{{input.value}}"</mat-row>
                     </table>
-                    <mat-paginator [length]="resultsLength" [pageSizeOptions]="[5, 10, 20]" showFirstLastButtons>
+                    <mat-paginator [length]="resultsLength" [pageSize]="10" [pageSizeOptions]="[5, 10, 25, 100]"
+                        showFirstLastButtons>
                     </mat-paginator>
                 </div>
             </div>

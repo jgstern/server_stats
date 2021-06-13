@@ -1,8 +1,9 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
-import { ColumnMode, DatatableComponent } from '@swimlane/ngx-datatable';
 import Autolinker from 'autolinker';
-import { ApiService } from '../api.service';
-import Fuse from 'fuse.js'
+import { ApiService, Row } from '../api.service';
+import { MatPaginator } from '@angular/material/paginator';
+import { MatSort } from '@angular/material/sort';
+import { MatTableDataSource } from '@angular/material/table';
 
 @Component({
   selector: 'app-link-finder',
@@ -10,25 +11,26 @@ import Fuse from 'fuse.js'
   styleUrls: ['./link-finder.component.scss']
 })
 export class LinkFinderComponent implements OnInit {
-  @ViewChild(DatatableComponent)
-  table!: DatatableComponent;
-
   room_name = "";
   links: any[] = [];
-  rows: any[] = [];
-  temp: any[] = [];
+  private rows: Row[] = [];
+  dataSource = new MatTableDataSource<Row>([]);
   filterColumn = 'incoming';
-  columns = [{ prop: 'name', name: 'Roomname' }, { name: 'Alias' }, { prop: 'room_id', name: 'Room ID' }, { name: 'Topic' }, { prop: 'incoming_links', name: 'Incoming Links' }, { prop: 'outgoing_links', name: 'Outgoing Links' }];
-  ColumnMode = ColumnMode;
-  first = true;
+  displayedColumns: string[] = ['name', 'alias', 'room_id', 'topic', 'members', 'incoming_links', 'outgoing_links'];
+  private first = true;
+  resultsLength = 0;
+  isLoadingResults = true;
+
+  @ViewChild(MatPaginator, { static: true })
+  private paginator!: MatPaginator;
+  @ViewChild(MatSort, { static: true })
+  private sort!: MatSort;
 
   constructor(public api: ApiService) { }
 
   ngOnInit(): void {
     if (this.api.data != null) {
-
       this.links = this.api.data.links;
-      this.temp = this.rows;
       if (this.first) {
         this.rows = this.api.data.nodes;
         this.rows = this.rows.filter(node => this.links.some(value => node["id"] === value["target"])).map(data => {
@@ -41,12 +43,16 @@ export class LinkFinderComponent implements OnInit {
           return data;
         });
         this.first = false;
+        this.resultsLength = this.rows.length;
+        this.isLoadingResults = false;
+        this.dataSource.data = this.rows;
+        this.dataSource.sort = this.sort;
+        this.dataSource.paginator = this.paginator;
       }
     }
     this.api.getDataUpdates().subscribe(data => {
       if (data != null) {
         const nodes = data.nodes;
-        this.temp = nodes;
         this.links = data.links;
         if (this.first) {
           this.rows = nodes;
@@ -60,6 +66,11 @@ export class LinkFinderComponent implements OnInit {
             return data;
           });
           this.first = false;
+          this.resultsLength = this.rows.length;
+          this.isLoadingResults = false;
+          this.dataSource.data = this.rows;
+          this.dataSource.sort = this.sort;
+          this.dataSource.paginator = this.paginator;
         }
       }
     })
@@ -77,71 +88,46 @@ export class LinkFinderComponent implements OnInit {
     this.filterColumn = value.toLowerCase();
   }
 
-  updateFilter(event: any) {
-    const val = event.target.value.toLowerCase();
-    const filterColumn = this.filterColumn;
-    // filter our data
-    const indexName = filterColumn as "incoming" | "outgoing";
-    const options = {
-      includeScore: true,
-      // Search in `author` and in `tags` array
-      keys: ['name']
-    };
+  updateFilter(event: Event) {
+    const filterValue = (event.target as HTMLInputElement).value;
+    this.dataSource.data = this.rows;
+    this.room_name = "";
+    if (filterValue !== "") {
+      this.dataSource.filter = filterValue;
 
-    const fuse = new Fuse(this.temp, options);
-
-    const result = fuse.search(val);
-    if (result.length == 0) {
-      if (this.api.data != null) {
-        const nodes = this.api.data.nodes.map(data => {
-          if (data.updated === false || data.updated == null) {
-            const alias_server = data.alias.split(":")[1];
-            data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
-            data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
-            data.updated = true;
-          }
-          return data;
-        });
-        this.rows = nodes;
+      if (this.dataSource.filteredData.length > 0) {
+        this.room_name = this.dataSource.filteredData[this.dataSource.filteredData.length - 1].name;
+        const room_hash = this.dataSource.filteredData[this.dataSource.filteredData.length - 1].id;
+        if (this.filterColumn == "incoming") {
+          const links = this.links.filter(link => link["target"] === room_hash);
+          const rows = this.rows.filter(node => links.some(value => node["id"] === value["source"])).map(data => {
+            if (data.updated === false || data.updated == null) {
+              const alias_server = data.alias.split(":")[1];
+              data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
+              data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
+              data.updated = true;
+            }
+            return data;
+          });
+          this.dataSource.data = rows;
+          this.dataSource.filter = "";
+        } else if (this.filterColumn == "outgoing") {
+          const links = this.links.filter(link => link["source"] === room_hash);
+          const rows = this.rows.filter(node => links.some(value => node["id"] === value["target"])).map(data => {
+            if (data.updated === false || data.updated == null) {
+              const alias_server = data.alias.split(":")[1];
+              data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
+              data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
+              data.updated = true;
+            }
+            return data;
+          });
+          this.dataSource.data = rows;
+          this.dataSource.filter = "";
+        }
       }
-
-      return;
     }
 
-    result.sort((a, b) => {
-      // Compare the 2 scores
-      if (a.score!! < b.score!!) return -1;
-      if (a.score!! > b.score!!) return 1;
-      return 0;
-    });
 
-    const room_hash = result[0].item["id"];
-    this.room_name = result[0].item["name"];
-    if (indexName == "incoming") {
-      const links = this.links.filter(link => link["target"] === room_hash);
-      this.rows = this.temp.filter(node => links.some(value => node["id"] === value["source"])).map(data => {
-        if (data.updated === false || data.updated == null) {
-          const alias_server = data.alias.split(":")[1];
-          data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
-          data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
-          data.updated = true;
-        }
-        return data;
-      });
-    } else if (indexName == "outgoing") {
-      const links = this.links.filter(link => link["source"] === room_hash);
-      this.rows = this.temp.filter(node => links.some(value => node["id"] === value["target"])).map(data => {
-        if (data.updated === false || data.updated == null) {
-          const alias_server = data.alias.split(":")[1];
-          data.alias = `<a href="https://matrix.to/#/${data.alias}?via=${alias_server}&via=matrix.org" target="_blank" rel="noopener noreferrer">${data.alias}</a>`;
-          data.topic = Autolinker.link(this.truncateText(data.topic, 500), { sanitizeHtml: true });
-          data.updated = true;
-        }
-        return data;
-      });
-    }
-    // Whenever the filter changes, always go back to the first page
-    this.table.offset = 0;
   }
-
 }

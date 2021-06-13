@@ -66,8 +66,8 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "2.85mb",
-                  "maximumError": "2.9mb"
+                  "maximumWarning": "2.71mb",
+                  "maximumError": "2.8mb"
                 },
                 {
                   "type": "anyComponentStyle",
@@ -82,8 +82,7 @@
         },
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
-          "options": {
-          },
+          "options": {},
           "configurations": {
             "production": {
               "browserTarget": "server-stats:build:production"
