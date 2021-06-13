@@ -35,9 +35,11 @@
     <mat-sidenav-content fxFlexFill>
         <div class="inner-content">
             <h1>Room List</h1>
-            <nz-alert nzType="info" nzMessage="Why is the table empty?"
-                nzDescription="Please be patient. The initial loading of the table can take multiple seconds. Make sure to wait for it to complete before searching"
-                nzShowIcon></nz-alert><br />
+            <div class="alert alert-primary" role="alert">
+                <h4 class="alert-heading">Why is the table empty?</h4>
+                <p>Please be patient. The initial loading of the table can take multiple seconds. Make sure to wait for
+                    it to complete before searching</p>
+            </div><br />
             <div fxLayout="row">
                 <mat-form-field class="search-type">
                     <mat-label>Search type selection</mat-label>
