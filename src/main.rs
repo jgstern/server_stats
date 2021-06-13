@@ -215,7 +215,7 @@ async fn start_queue(
                 tokio::spawn(
                     async move {
                         if let Err(e) = crate::jobs::find_servers(
-                            &PG_POOL.get().unwrap(),
+                            PG_POOL.get().unwrap(),
                             &cache.clone(),
                             &config.clone(),
                         )

@@ -36,7 +36,7 @@ pub async fn run_server(
     exporter: PrometheusExporter,
 ) {
     info!("Starting appservice...");
-    let appservice = generate_appservice(&config, cache.clone()).await;
+    let appservice = generate_appservice(config, cache.clone()).await;
     let addr = IpAddr::from_str(config.api.ip.as_ref());
     let path = format!("{}index.html", config.api.webpage_path);
     let graph = cache.graph.clone();
@@ -44,9 +44,9 @@ pub async fn run_server(
     let graph_two = graph.clone();
     info!("Path is: {} and {}", config.api.webpage_path, path);
 
-    let log = warp::log::custom(|info| {
+    /*let log = warp::log::custom(|info| {
         info!("{} {} {}", info.method(), info.path(), info.status(),);
-    });
+    });*/
 
     let opt_servers_query = warp::query::<Servers>()
         .map(Some)
@@ -77,7 +77,7 @@ pub async fn run_server(
                         servers(graph, include_members).await
                     },
                 ))
-            .or(warp::fs::dir(config.api.webpage_path.to_string()))
+            .or(warp::fs::dir(config.api.webpage_path.to_string()).map(cache_header))
             .or(warp::path("spaces")
                 .and(warp::path::end())
                 .and(warp::fs::file(path.clone())))
@@ -93,7 +93,8 @@ pub async fn run_server(
             .or(warp::path("api")
                 .and(warp::path::end())
                 .and(warp::fs::file(path.clone())))
-            .or(warp::path::end().and(warp::get()).and(warp::fs::file(path))))
+            .or(warp::path::end().and(warp::get()).and(warp::fs::file(path)))
+            .with(warp::compression::brotli()))
         .recover(handle_rejection)
         .with(warp::trace::request());
     //.with(log);
@@ -103,6 +104,19 @@ pub async fn run_server(
     } else {
         error!("Unable to start webserver: Invalid IP Address")
     }
+}
+
+fn cache_header(reply: warp::filters::fs::File) -> impl Reply {
+    if let Some(extension) = reply.path().extension() {
+        if let Some(extension) = extension.to_str() {
+            if extension == "js" || extension == "css" || extension == "png" || extension == "woff"
+            {
+                return warp::reply::with_header(reply, "Cache-Control", "max-age=31536000")
+                    .into_response();
+            }
+        };
+    };
+    reply.into_response()
 }
 
 #[tracing::instrument]

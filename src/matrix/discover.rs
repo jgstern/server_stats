@@ -32,9 +32,9 @@ impl fmt::Display for MatrixSsServername {
 #[tracing::instrument]
 pub async fn resolve_server_name(server_name: &str) -> Result<MatrixSsServername, Errors> {
     // If ip literal with port
-    if let Ok(addr) = SocketAddr::from_str(&server_name) {
+    if let Ok(addr) = SocketAddr::from_str(server_name) {
         return Ok(MatrixSsServername::Ip(addr));
-    } else if let Ok(ip) = IpAddr::from_str(&server_name) {
+    } else if let Ok(ip) = IpAddr::from_str(server_name) {
         // If ip without port
         return Ok(MatrixSsServername::Ip(SocketAddr::new(ip, 8448)));
     }
@@ -44,9 +44,9 @@ pub async fn resolve_server_name(server_name: &str) -> Result<MatrixSsServername
 
     // If has hostname and port
     let port_re = Regex::new(r":([0-9]+)$").unwrap();
-    if port_re.is_match(&server_name) {
-        let caps = port_re.captures(&server_name).unwrap();
-        let hostname = port_re.replace(&server_name, "");
+    if port_re.is_match(server_name) {
+        let caps = port_re.captures(server_name).unwrap();
+        let hostname = port_re.replace(server_name, "");
         let port = caps.get(1).unwrap().as_str();
 
         // Get AAAA/A record

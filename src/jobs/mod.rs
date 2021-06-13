@@ -47,7 +47,7 @@ pub async fn update_versions(cache: &CacheDb, influx_db: InfluxDb) -> color_eyre
         })
         .await;
     info!("Pushing updated versions");
-    influx_db.push_versions(&cache).await?;
+    influx_db.push_versions(cache).await?;
     info!("Finished update_versions task");
     Ok(())
 }

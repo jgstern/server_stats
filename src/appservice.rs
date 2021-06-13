@@ -216,12 +216,12 @@ impl VoyagerBot {
         event_id: Option<EventId>,
     ) {
         // Early exist if there are no regex matches
-        if !REGEX.is_match(&msg_body) {
+        if !REGEX.is_match(msg_body) {
             return;
         }
 
         // Iterate over aliases
-        for cap in REGEX.captures_iter(&msg_body) {
+        for cap in REGEX.captures_iter(msg_body) {
             let room_alias = cap[0].to_string();
 
             let client = client.clone();
@@ -318,7 +318,7 @@ impl VoyagerBot {
         let mut resp = None;
         if let Ok(_guard) = MESSAGES_SEMPAHORE.acquire().await {
             // Prepare messages request
-            let mut request = MessagesRequest::new(&room_id, "", Direction::Backward);
+            let mut request = MessagesRequest::new(room_id, "", Direction::Backward);
             request.limit = uint!(60);
             request.filter = Some(MESSAGES_FILTER.clone());
             resp = Some(room.messages(request).await);
@@ -395,7 +395,7 @@ impl VoyagerBot {
                     while tries <= 5 && end == old_end {
                         if let Ok(_guard) = MESSAGES_SEMPAHORE.acquire().await {
                             let mut request =
-                                MessagesRequest::new(&room_id, &end, Direction::Backward);
+                                MessagesRequest::new(room_id, &end, Direction::Backward);
                             request.limit = uint!(60);
                             request.filter = Some(MESSAGES_FILTER.clone());
                             let previous = room.messages(request).await;
@@ -816,9 +816,30 @@ impl EventHandler for VoyagerBot {
                 return;
             }
             let client = self.appservice.get_cached_client(None).unwrap();
-            client.join_room_by_id(room.room_id()).await.unwrap();
+            let joined_room =
+                VoyagerBot::join_via_server(client.clone(), room.room_id().as_str()).await;
             VoyagerBot::set_direct(client, room.clone(), event).await;
             info!("Successfully joined room {}", room.room_id());
+
+            if let Some(room) = joined_room {
+                if room.is_encrypted() {
+                    info!("Sending mention that the bot cant do e2ee");
+                    room.typing_notice(true)
+                        .await
+                        .expect("Can't send typing event");
+                    let content = AnyMessageEventContent::RoomMessage(
+                        MessageEventContent::notice_plain(
+                            r#"Hi! I am the server_stats Discovery bot by @mtrnord:nordgedanken.dev ! \n\n\n
+                   I am currently not able to read encrypted Rooms. Any command you try to send me will not work. Instead mention me in a room with !help."#,
+                        ),
+                    );
+                    room.send(content, None).await.unwrap();
+
+                    room.typing_notice(false)
+                        .await
+                        .expect("Can't send typing event");
+                }
+            };
         };
     }
 
