@@ -13,11 +13,14 @@ const routes: Routes = [
   { path: 'faq', component: FaqComponent },
   { path: 'spaces', component: SpaceFinderComponent },
   { path: 'api', component: ApiComponent },
-  { path: '**', component: RoomListComponent, pathMatch: 'full' }
+  { path: 'rooms', component: RoomListComponent },
+  { path: '**', redirectTo: '/rooms', pathMatch: 'full' }
 ];
 
 @NgModule({
-  imports: [RouterModule.forRoot(routes)],
+  imports: [RouterModule.forRoot(routes, {
+    initialNavigation: 'enabled'
+  })],
   exports: [RouterModule]
 })
 export class AppRoutingModule { }

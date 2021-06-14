@@ -1,0 +1,81 @@
+
+> server-stats@0.0.0 prerender
+> ng run server-stats:prerender
+
+- Generating server application bundles (phase: setup)...
+- Generating browser application bundles (phase: setup)...
+✔ Server application bundle generation complete.
+✔ Server application bundle generation complete.
+
+Initial Chunk Files | Names         |    Size
+main.js             | main          | 5.64 MB
+
+| Initial Total | 5.64 MB
+
+Build at: 2021-06-14T01:52:40.040Z - Hash: 85171da79df1bf69b87d - Time: 40296ms
+✔ Browser application bundle generation complete.
+- Copying assets...
+✔ Browser application bundle generation complete.
+✔ Copying assets complete.
+- Generating index html...
+✔ Index html generation complete.
+
+Initial Chunk Files               | Names         |      Size
+vendor.25549533d00749986965.js    | vendor        |   1.58 MB
+scripts.02178ca42a1d69a9d6b4.js   | scripts       | 967.84 kB
+styles.d4ffcb7f60d9a5f2bcf4.css   | styles        | 100.62 kB
+main.f0adfd875c5e2ac2ba4d.js      | main          |  59.54 kB
+polyfills.bd73669779590ee291b0.js | polyfills     |  39.70 kB
+runtime.12823a497442767a4c6c.js   | runtime       |   1.15 kB
+
+| Initial Total |   2.72 MB
+
+Build at: 2021-06-14T01:52:58.128Z - Hash: b0918af1713f767b54fd - Time: 53990ms
+- Prerendering 7 route(s) to /opt/dev_env/server_stats/webpage/dist/server-stats/browser...
+ERROR NetworkError
+    at XMLHttpRequest.send (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:5129609)
+    at Observable._subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:429157)
+    at Observable._trySubscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952953)
+    at Observable.subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952735)
+    at /opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:2306332
+    at Observable._subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:2306677)
+    at Observable._trySubscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952953)
+    at Observable.subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952735)
+    at innerSubscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3972874)
+    at MergeMapSubscriber._innerSub (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:4016467)
+ERROR NetworkError
+    at XMLHttpRequest.send (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:5129609)
+    at Observable._subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:429157)
+    at Observable._trySubscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952953)
+    at Observable.subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952735)
+    at /opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:2306332
+    at Observable._subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:2306677)
+    at Observable._trySubscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952953)
+    at Observable.subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952735)
+    at innerSubscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3972874)
+    at MergeMapSubscriber._innerSub (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:4016467)
+ERROR NetworkError
+    at XMLHttpRequest.send (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:5129609)
+    at Observable._subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:429157)
+    at Observable._trySubscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952953)
+    at Observable.subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952735)
+    at /opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:2306332
+    at Observable._subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:2306677)
+    at Observable._trySubscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952953)
+    at Observable.subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952735)
+    at innerSubscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3972874)
+    at MergeMapSubscriber._innerSub (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:4016467)
+ERROR NetworkError
+    at XMLHttpRequest.send (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:5129609)
+    at Observable._subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:429157)
+    at Observable._trySubscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952953)
+    at Observable.subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952735)
+    at /opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:2306332
+    at Observable._subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:2306677)
+    at Observable._trySubscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952953)
+    at Observable.subscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3952735)
+    at innerSubscribe (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:3972874)
+    at MergeMapSubscriber._innerSub (/opt/dev_env/server_stats/webpage/dist/server-stats/server/main.js:1:4016467)
+✔ Prerendering routes to /opt/dev_env/server_stats/webpage/dist/server-stats/browser complete.
+- Generating service worker...
+✔ Service worker generation complete.

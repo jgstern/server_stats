@@ -33,7 +33,7 @@
         </div>
     </mat-sidenav>
     <mat-sidenav-content fxFlexFill>
-        <div class="in-graph">
+        <div class="in-graph" *ngIf="isBrowser">
             <div class="wrapper" #wrapper>
                 <div id="graph" #graph></div>
                 <div id="info">

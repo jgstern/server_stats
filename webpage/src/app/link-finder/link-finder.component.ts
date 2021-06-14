@@ -26,7 +26,7 @@ export class LinkFinderComponent implements OnInit {
   @ViewChild(MatSort, { static: true })
   private sort!: MatSort;
 
-  constructor(public api: ApiService) { }
+  constructor(public api: ApiService,) { }
 
   ngOnInit(): void {
     if (this.api.data != null) {

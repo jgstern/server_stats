@@ -16,8 +16,6 @@ export class ApiComponent implements AfterViewInit, OnDestroy {
     this.attachDocumentationComponent()
   }
 
-
-
   async attachDocumentationComponent() {
     const elem = this.element.nativeElement.querySelector('#redoc')
 

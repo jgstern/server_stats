@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, Inject, OnDestroy, PLATFORM_ID, ViewChild } from '@angular/core';
 import ForceGraph3D, {
   ForceGraph3DInstance
 } from "3d-force-graph";
@@ -6,6 +6,9 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import Autolinker from 'autolinker';
 import { APIData, ApiService } from '../api.service';
 import { Vector2 } from 'three';
+import { WindowRef } from '../window.service';
+import { isPlatformBrowser } from '@angular/common';
+import { EventManager } from '@angular/platform-browser';
 
 
 @Component({
@@ -37,8 +40,16 @@ export class ThreeDGraphComponent implements AfterViewInit, OnDestroy {
   private graph?: ForceGraph3DInstance;
   data?: APIData;
   first: boolean = true;
+  isBrowser: boolean = false;
 
-  constructor(private api: ApiService) { }
+  constructor(private api: ApiService, @Inject(PLATFORM_ID) platformId: Object,
+    private windowRef: WindowRef, private eventManager: EventManager) {
+    this.isBrowser = isPlatformBrowser(platformId);
+    if (this.isBrowser) {
+      this.eventManager.addGlobalEventListener('window', 'resize', this.windowResize.bind(this));
+    }
+  }
+
   ngOnDestroy(): void {
     if (this.graph != null) {
       this.graph._destructor();
@@ -61,7 +72,7 @@ export class ThreeDGraphComponent implements AfterViewInit, OnDestroy {
       this.sidebar.nativeElement.setAttribute('animation', 'close_anim');
     })
 
-    const bloomPass = new UnrealBloomPass(new Vector2(window.innerWidth, window.innerHeight), 0.35, 0, 0.1);
+    const bloomPass = new UnrealBloomPass(new Vector2(this.windowRef.nativeWindow.innerWidth, this.windowRef.nativeWindow.innerHeight), 0.35, 0, 0.1);
     this.graph!.renderer().toneMappingExposure = Math.pow(1, 4.0);
 
     this.graph?.onNodeClick((node: any) => {
@@ -104,51 +115,51 @@ export class ThreeDGraphComponent implements AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
-    this.graph = ForceGraph3D()(this.graph_element.nativeElement).warmupTicks(50)
-      .backgroundColor('#101020')
-      .nodeRelSize(6)
-      .nodeAutoColorBy('name')
-      .nodeOpacity(0.95)
-      .nodeResolution(8)
-      .linkColor(() => 'rgba(255,255,255,0.2)')
-      .linkOpacity(0.8)
-      .linkWidth(2)
-      .linkDirectionalParticles(2)
-      .linkDirectionalParticleWidth(1)
-      .linkDirectionalParticleSpeed(0.003)
-      .onNodeHover(node => this.graph_element.nativeElement.style.cursor = node ? 'pointer' : null);
-    if (this.api.data != null && this.first) {
-      this.data = this.api.data;
-      this.setupGraph();
-      this.first = false;
-    }
-    this.api.getDataUpdates().subscribe((data) => {
-      if (data != null) {
-        this.data = data;
-        if (this.first) {
-          this.setupGraph();
-          this.first = false;
-        }
-        if (this.graph != null) {
-          let graph_data = this.graph.graphData();
-          let nodes_new = this.difference_nodes(this.data.nodes, graph_data?.nodes as any[]);
-          let links_new = this.difference_links(this.data.links, graph_data?.links as any[]);
-          if (nodes_new.length !== 0 || links_new.length !== 0) {
-            let new_data = {
-              nodes: [...graph_data?.nodes as object[], ...nodes_new],
-              links: [...graph_data?.links as object[], ...links_new]
-            };
-            this.data = new_data as APIData;
-            this.graph.graphData(new_data);
+    if (this.isBrowser) {
+      this.graph = ForceGraph3D()(this.graph_element.nativeElement).warmupTicks(50)
+        .backgroundColor('#101020')
+        .nodeRelSize(6)
+        .nodeAutoColorBy('name')
+        .nodeOpacity(0.95)
+        .nodeResolution(8)
+        .linkColor(() => 'rgba(255,255,255,0.2)')
+        .linkOpacity(0.8)
+        .linkWidth(2)
+        .linkDirectionalParticles(2)
+        .linkDirectionalParticleWidth(1)
+        .linkDirectionalParticleSpeed(0.003)
+        .onNodeHover(node => this.graph_element.nativeElement.style.cursor = node ? 'pointer' : null);
+      if (this.api.data != null && this.first) {
+        this.data = this.api.data;
+        this.setupGraph();
+        this.first = false;
+      }
+      this.api.getDataUpdates().subscribe((data) => {
+        if (data != null) {
+          this.data = data;
+          if (this.first) {
+            this.setupGraph();
+            this.first = false;
+          }
+          if (this.graph != null) {
+            let graph_data = this.graph.graphData();
+            let nodes_new = this.difference_nodes(this.data.nodes, graph_data?.nodes as any[]);
+            let links_new = this.difference_links(this.data.links, graph_data?.links as any[]);
+            if (nodes_new.length !== 0 || links_new.length !== 0) {
+              let new_data = {
+                nodes: [...graph_data?.nodes as object[], ...nodes_new],
+                links: [...graph_data?.links as object[], ...links_new]
+              };
+              this.data = new_data as APIData;
+              this.graph.graphData(new_data);
+            }
           }
         }
-      }
 
-    });
+      });
+    }
   }
 
-
-  @HostListener("window:resize")
   public windowResize() {
     const box = this.wrapper?.nativeElement.getBoundingClientRect();
     this.graph?.width(box.width);

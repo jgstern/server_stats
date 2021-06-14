@@ -1,9 +1,10 @@
-import { Component, AfterViewInit, ViewChild, OnInit } from '@angular/core';
+import { Component, AfterViewInit, ViewChild, OnInit, Inject, PLATFORM_ID, ElementRef } from '@angular/core';
 import Autolinker from 'autolinker';
 import { ApiService, Row } from '../api.service';
 import { MatTableDataSource } from '@angular/material/table';
 import { MatPaginator } from '@angular/material/paginator';
 import { MatSort } from '@angular/material/sort';
+import { isPlatformBrowser } from '@angular/common';
 
 @Component({
   selector: 'app-room-list',
@@ -29,7 +30,7 @@ export class RoomListComponent implements OnInit, AfterViewInit {
   @ViewChild(MatSort, { static: true })
   private sort!: MatSort;
 
-  constructor(public api: ApiService) {
+  constructor(public api: ApiService, @Inject(PLATFORM_ID) platformId: Object,) {
     this.dataSource.filterPredicate = this.tableFilter();
   }
 
