@@ -62,9 +62,6 @@ features = ["warp"]
 [patch.crates-io]
 warp = { version = "0.3", git = "https://github.com/MTRNord/warp", rev = "631ecab", default-features = false, features = ["multipart", "websocket","compression"] }
 
-[build-dependencies]
-walkdir = "2"
-
 [profile.release]
 opt-level = 2
 lto = true

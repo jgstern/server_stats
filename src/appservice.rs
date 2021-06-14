@@ -14,8 +14,8 @@ use matrix_sdk::{
             member::{MemberEventContent, MembershipState},
             message::{MessageEventContent, MessageType, TextMessageEventContent},
         },
-        AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, EventType, RawExt, SyncMessageEvent,
-        SyncStateEvent,
+        AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, AnyStateEventContent, EventType,
+        RawExt, SyncMessageEvent, SyncStateEvent,
     },
     identifiers::{EventId, RoomId, RoomIdOrAliasId, ServerName, UserId},
     room::{Joined, Room},
@@ -38,7 +38,7 @@ pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice 
         server_name.as_str(),
         registration.clone(),
         ClientConfig::default()
-            .store_path("./store/")
+            .store_path("./store_new/")
             .request_config(
                 RequestConfig::default()
                     .assert_identity()
@@ -471,6 +471,26 @@ impl VoyagerBot {
                                 base_room.mark_as_joined();
                             }
                             // Get base info
+
+                            // Spaces
+                            let room_create_request =
+                                matrix_sdk::api::r0::state::get_state_events_for_key::Request::new(
+                                    &resp.room_id,
+                                    EventType::RoomCreate,
+                                    "",
+                                );
+
+                            if let Ok(room_create_response) =
+                                client.send(room_create_request, None).await
+                            {
+                                let deserialized = room_create_response
+                                    .content
+                                    .deserialize_content("m.room.encryption") // deserialize to the inner type
+                                    .unwrap();
+                                if let AnyStateEventContent::RoomCreate(create) = deserialized {
+                                    base_room.set_matrix_room_type(create.room_type);
+                                }
+                            }
 
                             // Encryption
                             let room_encryption_request =

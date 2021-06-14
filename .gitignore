@@ -7,5 +7,7 @@ config.yaml
 /storage
 /storage_old
 /store
+/store_new
 registration.yaml
 out.rs
+api.json
