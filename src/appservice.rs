@@ -94,13 +94,15 @@ pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice 
     });*/
 
     let client = appservice.get_cached_client(None).unwrap();
-    crate::MATRIX_CLIENT.set(client);
+    if crate::MATRIX_CLIENT.set(client).is_err() {
+        error!("Failed to globally set matrix client");
+    };
 
     let event_handler = VoyagerBot::new(appservice.clone(), cache, config.clone());
 
     if let Err(e) = appservice.set_event_handler(Box::new(event_handler)).await {
         error!("Failed to set event handler: {}", e);
-    }
+    };
 
     appservice
 }

@@ -184,7 +184,9 @@ async fn do_websocket(websocket: warp::ws::WebSocket, mut broadcast_rx: Receiver
             let j = serde_json::to_string(&json).unwrap();
             if let Err(e) = tx.send(Message::text(j.clone())).await {
                 error!("Failed to send via websocket: {:?}", e);
-                tx.close().await;
+                if let Err(e) = tx.close().await {
+                    error!("Failed to close websocket: {:?}", e);
+                }
                 return;
             }
         }

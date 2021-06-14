@@ -175,7 +175,9 @@ async fn main() -> Result<()> {
 
                 // Starting sheduler
                 info!("Starting sheduler");
-                PG_POOL.set(pool);
+                if PG_POOL.set(pool).is_err() {
+                    error!("Failed to set pg pool globally");
+                };
 
                 start_queue(cache, influx_db, config.clone(), Arc::new(recorder))
                     .await

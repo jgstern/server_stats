@@ -41,7 +41,7 @@ chrono = "0.4"
 mime_guess = "2.0.3"
 rand = "0.8.3"
 
-warp = { version = "0.3", git = "https://github.com/seanmonstar/warp", rev = "629405", default-features = false, features = ["multipart", "websocket","compression"] }
+warp = { version = "0.3", git = "https://github.com/MTRNord/warp", rev = "631ecab", default-features = false, features = ["multipart", "websocket","compression"] }
 opentelemetry-prometheus = "0.7.0"
 opentelemetry = { version = "0.14", features = ["rt-tokio"] }
 prometheus = "0.12.0"
@@ -60,7 +60,7 @@ branch = "MTRNord/server_stats_warp_upstream"
 features = ["warp"]
 
 [patch.crates-io]
-warp = { version = "0.3", git = "https://github.com/seanmonstar/warp", rev = "629405", default-features = false, features = ["multipart", "websocket","compression"] }
+warp = { version = "0.3", git = "https://github.com/MTRNord/warp", rev = "631ecab", default-features = false, features = ["multipart", "websocket","compression"] }
 
 [build-dependencies]
 walkdir = "2"
