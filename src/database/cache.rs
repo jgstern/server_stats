@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use color_eyre::Result;
 use sled::IVec;
+use sqlx::PgPool;
 use tokio::sync::watch::Sender;
 
 use crate::database::graph::GraphDb;
@@ -17,7 +18,7 @@ pub struct CacheDb {
 
 impl CacheDb {
     #[tracing::instrument(name = "CacheDb::new", skip(tx))]
-    pub fn new(tx: Sender<Option<SSEJson>>) -> Self {
+    pub fn new(tx: Sender<Option<SSEJson>>,pool:PgPool) -> Self {
         info!("Created new db");
         let db = sled::Config::default()
             .path("./storage/cache".to_owned())
@@ -33,7 +34,7 @@ impl CacheDb {
             state,
             parent_child,
             child_parent,
-            tx,
+            tx,pool
         ));
         let db = Arc::new(db);
         CacheDb { db, graph }

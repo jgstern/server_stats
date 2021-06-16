@@ -42,7 +42,6 @@ struct Opts {
 }
 
 pub static MATRIX_CLIENT: OnceCell<Client> = OnceCell::new();
-pub static PG_POOL: OnceCell<PgPool> = OnceCell::new();
 pub static MESSAGES_SEMPAHORE: Lazy<Arc<Semaphore>> = Lazy::new(|| Arc::new(Semaphore::new(50)));
 
 pub static APP_USER_AGENT: &str = concat!("MTRNord/", env!("CARGO_PKG_NAME"),);
@@ -139,7 +138,14 @@ async fn main() -> Result<()> {
     let config = Config::load(opts.config)?;
 
     let (tx, rx) = watch::channel(None);
-    let cache = CacheDb::new(tx);
+
+    info!("Connecting to postgres...");
+    let postgres_url = config.postgres.url.as_ref();
+    let pool = PgPoolOptions::new()
+        .max_connections(100)
+        .connect(postgres_url)
+        .await?;
+    let cache = CacheDb::new(tx, pool.clone());
 
     if config.bot.force_cleanup {
         let cloned_cache = cache.clone();
@@ -154,37 +160,32 @@ async fn main() -> Result<()> {
     let (exporter, recorder) = init_prometheus();
 
     let span = info_span!("Get Versions and start sheduler");
+    let pool_clone = pool.clone();
     tokio::spawn(
         async move {
             let influx_db = InfluxDb::new(&cloned_config);
             let cache = cloned_cache.clone();
-            let config = cloned_config.clone();
-            info!("Connecting to postgres...");
-            let postgres_url = config.postgres.url.as_ref();
-            let pool = PgPoolOptions::new()
-                .max_connections(100)
-                .connect(postgres_url)
-                .await;
-            if let Ok(pool) = pool {
-                // Get servers once
-                if let Err(e) = crate::jobs::find_servers(&pool, &cache, &config).await {
-                    error!("Error servers: {}", e);
-                }
+            // Get servers once
+            if let Err(e) = crate::jobs::find_servers(&pool_clone, &cache, &cloned_config).await {
+                error!("Error servers: {}", e);
+            }
 
-                if let Err(e) = crate::jobs::update_versions(&cache, influx_db.clone()).await {
-                    error!("Error versions: {}", e);
-                }
+            if let Err(e) = crate::jobs::update_versions(&cache, influx_db.clone()).await {
+                error!("Error versions: {}", e);
+            }
 
-                // Starting sheduler
-                info!("Starting sheduler");
-                if PG_POOL.set(pool).is_err() {
-                    error!("Failed to set pg pool globally");
-                };
+            // Starting sheduler
+            info!("Starting sheduler");
 
-                start_queue(cache, influx_db, config.clone(), Arc::new(recorder))
-                    .await
-                    .unwrap();
-            };
+            start_queue(
+                cache,
+                influx_db,
+                cloned_config.clone(),
+                Arc::new(recorder),
+                pool_clone,
+            )
+            .await
+            .unwrap();
         }
         .instrument(span),
     );
@@ -192,9 +193,7 @@ async fn main() -> Result<()> {
     info!("Starting webserver...");
     run_server(&config, cache, rx, exporter).await;
 
-    if let Some(pool) = PG_POOL.get() {
-        pool.close().await;
-    }
+    pool.close().await;
     opentelemetry::global::shutdown_tracer_provider();
     std::process::exit(0);
 }
@@ -205,25 +204,25 @@ async fn start_queue(
     influx_db: InfluxDb,
     config: Config,
     recorder: Arc<GenericGauge<AtomicF64>>,
+    pgpool: PgPool,
 ) -> Result<()> {
     let mut sched = JobScheduler::new();
 
     let cache_two = cache.clone();
+    let pgpool_two = pgpool.clone();
     sched
         .add(
             //Should be */30
             Job::new("0 */30 * * * *", move |_, _| {
                 let cache = cache_two.clone();
+                let pgpool = pgpool_two.clone();
                 let config = config.clone();
                 let span = debug_span!("Start sheduled find_servers");
                 tokio::spawn(
                     async move {
-                        if let Err(e) = crate::jobs::find_servers(
-                            PG_POOL.get().unwrap(),
-                            &cache.clone(),
-                            &config.clone(),
-                        )
-                        .await
+                        if let Err(e) =
+                            crate::jobs::find_servers(&pgpool, &cache.clone(), &config.clone())
+                                .await
                         {
                             error!("Error: {}", e);
                         }

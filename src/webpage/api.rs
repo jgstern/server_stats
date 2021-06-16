@@ -17,7 +17,7 @@ pub struct SSEJson {
 pub struct Link {
     pub source: String,
     pub target: String,
-    pub value: i32,
+    pub value: i64,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Ord, Eq, PartialOrd, Hash)]
@@ -27,7 +27,7 @@ pub struct RoomRelation {
     pub name: String,
     pub alias: String,
     pub avatar: String,
-    pub members: i32,
+    pub members: i64,
     pub topic: String,
     pub weight: Option<i32>,
     pub incoming_links: Option<i32>,

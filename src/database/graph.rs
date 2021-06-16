@@ -1,15 +1,21 @@
-use crate::webpage::api::{Link, RelationsJson, RoomRelation, SSEJson, ServersJson};
+use crate::{
+    errors::Errors,
+    webpage::api::{Link, RelationsJson, RoomRelation, SSEJson, ServersJson},
+};
 use color_eyre::Result;
-use matrix_sdk::{identifiers::RoomId, room::Joined, RoomMember};
+use futures::{future, StreamExt, TryStreamExt};
+use matrix_sdk::{identifiers::RoomId, room::Joined};
 use sled::{IVec, Iter};
+use sqlx::PgPool;
 use std::{
     borrow::Cow,
     collections::BTreeSet,
     convert::{TryFrom, TryInto},
     sync::Arc,
+    time::Instant,
 };
 use tokio::sync::watch::Sender;
-use tracing::error;
+use tracing::{error, info};
 
 type RelationsMix = Vec<((String, String), BTreeSet<u128>)>;
 
@@ -20,6 +26,12 @@ pub struct GraphDb {
     parent_child: sled::Tree,
     child_parent: sled::Tree,
     websocket_tx: Sender<Option<SSEJson>>,
+    pool: PgPool,
+}
+
+#[derive(sqlx::FromRow, Debug, Clone)]
+struct Member {
+    state_key: String,
 }
 
 impl GraphDb {
@@ -33,6 +45,7 @@ impl GraphDb {
         parent_child: sled::Tree,
         child_parent: sled::Tree,
         tx: Sender<Option<SSEJson>>,
+        pool: PgPool,
     ) -> Self {
         GraphDb {
             hash_map,
@@ -40,7 +53,66 @@ impl GraphDb {
             parent_child,
             child_parent,
             websocket_tx: tx,
+            pool,
         }
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn get_synapse_joined_members_count(&self, room_id: &str) -> i64 {
+        let start = Instant::now();
+        let res = sqlx::query_as(
+            "SELECT COUNT(*) FROM current_state_events WHERE membership = 'join' AND type = 'm.room.member' AND room_id = $1;"
+        ).bind(room_id)
+        .fetch_one(&self.pool).await;
+        match res {
+            Ok(res) => {
+                let (rows,): (i64,) = res;
+                let duration = start.elapsed();
+                info!(
+                    "Took {:?} to get all membership events of type join",
+                    duration
+                );
+                return rows;
+            }
+            Err(e) => {
+                error!("Failed to get member count from db {:?}", e);
+            }
+        }
+
+        let duration = start.elapsed();
+        info!(
+            "Took {:?} to get all membership events of type join",
+            duration
+        );
+        0
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn get_synapse_joined_members(&self, room_id: &str) -> Vec<Member> {
+        let start = Instant::now();
+        let rows = sqlx::query_as::<_, Member>(
+            "SELECT state_key FROM current_state_events WHERE membership = 'join' AND type = 'm.room.member' AND room_id = $1;",
+        )
+        .bind(room_id)
+        .fetch(&self.pool)
+        .map_err(|e| Errors::DatabaseError(e.to_string()));
+        let filtered_events = rows
+            .map(|x| {
+                if let Err(ref e) = x {
+                    error!("Failed to get members from database: {}", e);
+                }
+                x
+            })
+            .filter_map(|x| future::ready(x.ok()))
+            .collect()
+            .await;
+
+        let duration = start.elapsed();
+        info!(
+            "Took {:?} to get all membership events of type join",
+            duration
+        );
+        filtered_events
     }
 
     #[tracing::instrument(skip(self))]
@@ -138,11 +210,7 @@ impl GraphDb {
                 {
                     return Ok(());
                 }
-                let members = if let Ok(members) = room.joined_members().await {
-                    members.len()
-                } else {
-                    0
-                };
+                let members = self.get_synapse_joined_members_count(child).await;
                 let sse_json = SSEJson {
                     node: Arc::new(RoomRelation {
                         id: base64::encode(child_hash.to_le_bytes()),
@@ -155,7 +223,7 @@ impl GraphDb {
                         outgoing_links: None,
                         room_id: child.into(),
                         is_space: room.is_space(),
-                        members: members.try_into().unwrap(),
+                        members,
                     }),
                     link: Arc::new(Link {
                         source: base64::encode(parent_hash.to_le_bytes()),
@@ -430,7 +498,7 @@ impl GraphDb {
             } else {
                 "".into()
             };
-            let members = room.active_members_count();
+            let members = self.get_synapse_joined_members_count(room_id).await;
             return Some(RoomRelation {
                 id: room_hash,
                 name,
@@ -442,7 +510,7 @@ impl GraphDb {
                 outgoing_links: None,
                 room_id: room_id.into(),
                 is_space: room.is_space(),
-                members: members.try_into().unwrap(),
+                members,
             });
         }
 
@@ -455,25 +523,6 @@ impl GraphDb {
         joined_rooms
             .iter()
             .any(|room| room.room_id() == room_id_serialized)
-    }
-
-    #[tracing::instrument(skip(self, joined_rooms))]
-    pub async fn get_room_members(
-        &self,
-        room_id: &str,
-        joined_rooms: &[Joined],
-    ) -> Vec<RoomMember> {
-        let room_id_serialized = &RoomId::try_from(room_id).unwrap();
-
-        if let Some(room) = joined_rooms
-            .iter()
-            .find(|room| room.room_id() == room_id_serialized)
-        {
-            if let Ok(members) = room.active_members().await {
-                return members;
-            }
-        }
-        vec![]
     }
 
     #[tracing::instrument(skip(self))]
@@ -574,10 +623,10 @@ impl GraphDb {
 
             if include_members {
                 for (_, room_id) in rooms_clone {
-                    let members = self.get_room_members(&room_id, &joined_rooms).await;
+                    let members = self.get_synapse_joined_members(&room_id).await;
                     for member in members {
-                        let server_name = member.user_id().server_name().as_str();
-                        servers.insert(server_name.to_string());
+                        let server_name: Vec<&str> = member.state_key.split(':').collect();
+                        servers.insert(server_name[1].to_string());
                     }
                 }
             }
