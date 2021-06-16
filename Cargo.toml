@@ -48,15 +48,16 @@ prometheus = "0.12.0"
 tracing-opentelemetry = "0.13.0"
 
 [dependencies.matrix-sdk]
-git = "https://github.com/MTRNord/matrix-rust-sdk"
-branch = "MTRNord/server_stats_warp_upstream"
-#path = "../matrix-rust-sdk/matrix_sdk"
-features = ["appservice"]
+#git = "https://github.com/MTRNord/matrix-rust-sdk"
+#branch = "MTRNord/server_stats_warp_upstream"
+path = "../matrix-rust-sdk/matrix_sdk"
+default-features = false
+features = ["appservice", "sled_cryptostore", "sled_state_store", "require_auth_for_profile_requests", "rustls-tls"]
 
 [dependencies.matrix-sdk-appservice]
-git = "https://github.com/MTRNord/matrix-rust-sdk"
-branch = "MTRNord/server_stats_warp_upstream"
-#path = "../matrix-rust-sdk/matrix_sdk_appservice"
+#git = "https://github.com/MTRNord/matrix-rust-sdk"
+#branch = "MTRNord/server_stats_warp_upstream"
+path = "../matrix-rust-sdk/matrix_sdk_appservice"
 features = ["warp"]
 
 [patch.crates-io]

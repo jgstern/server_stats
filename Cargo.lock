@@ -1342,7 +1342,6 @@ checksum = "7ffc5c5338469d4d3ea17d269fa8ea3512ad247247c30bd2df69e68309ed0a08"
 [[package]]
 name = "matrix-sdk"
 version = "0.2.0"
-source = "git+https://github.com/MTRNord/matrix-rust-sdk?branch=MTRNord/server_stats_warp_upstream#730382d9ef8c3d89f582efd5596660d03145a73a"
 dependencies = [
  "backoff",
  "bytes",
@@ -1367,7 +1366,6 @@ dependencies = [
 [[package]]
 name = "matrix-sdk-appservice"
 version = "0.1.0"
-source = "git+https://github.com/MTRNord/matrix-rust-sdk?branch=MTRNord/server_stats_warp_upstream#730382d9ef8c3d89f582efd5596660d03145a73a"
 dependencies = [
  "dashmap",
  "futures",
@@ -1388,7 +1386,6 @@ dependencies = [
 [[package]]
 name = "matrix-sdk-base"
 version = "0.2.0"
-source = "git+https://github.com/MTRNord/matrix-rust-sdk?branch=MTRNord/server_stats_warp_upstream#730382d9ef8c3d89f582efd5596660d03145a73a"
 dependencies = [
  "chacha20poly1305",
  "dashmap",
@@ -1413,7 +1410,6 @@ dependencies = [
 [[package]]
 name = "matrix-sdk-common"
 version = "0.2.0"
-source = "git+https://github.com/MTRNord/matrix-rust-sdk?branch=MTRNord/server_stats_warp_upstream#730382d9ef8c3d89f582efd5596660d03145a73a"
 dependencies = [
  "async-trait",
  "futures",
@@ -1429,7 +1425,6 @@ dependencies = [
 [[package]]
 name = "matrix-sdk-crypto"
 version = "0.2.0"
-source = "git+https://github.com/MTRNord/matrix-rust-sdk?branch=MTRNord/server_stats_warp_upstream#730382d9ef8c3d89f582efd5596660d03145a73a"
 dependencies = [
  "aes-ctr",
  "aes-gcm",

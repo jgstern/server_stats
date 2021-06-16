@@ -49,7 +49,7 @@ pub static APP_USER_AGENT: &str = concat!("MTRNord/", env!("CARGO_PKG_NAME"),);
 
 // Marks all rooms to have history purgedv
 #[tracing::instrument(skip(cache, config))]
-async fn force_cleanup(cache: &CacheDb, config: &Config) -> Result<()> {
+async fn force_cleanup(cache: CacheDb, config: Config) -> Result<()> {
     let now = Utc::now();
     let time = now - Duration::days(2);
     let timestamp = time.timestamp_millis();
@@ -78,16 +78,17 @@ async fn force_cleanup(cache: &CacheDb, config: &Config) -> Result<()> {
             server_address, room_id
         );
         info!("{}", url);
-        let body = client
+        if let Ok(resp) = client
             .post(url.clone())
             .header("Authorization", auth_header.clone())
             .json(&map)
             .send()
-            .await?
-            .text()
-            .await?;
-
-        info!("{} = {:?}", url, body);
+            .await
+        {
+            if let Ok(body) = resp.text().await {
+                info!("{} = {:?}", url, body);
+            }
+        }
         sleep(std::time::Duration::from_secs(5)).await;
     }
 
@@ -141,8 +142,9 @@ async fn main() -> Result<()> {
     let cache = CacheDb::new(tx);
 
     if config.bot.force_cleanup {
-        force_cleanup(&cache, &config).await?;
-        return Ok(());
+        let cloned_cache = cache.clone();
+        let cloned_config = config.clone();
+        tokio::spawn(force_cleanup(cloned_cache, cloned_config));
     }
 
     info!("Setting up prometheus...");

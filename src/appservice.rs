@@ -14,8 +14,8 @@ use matrix_sdk::{
             member::{MemberEventContent, MembershipState},
             message::{MessageEventContent, MessageType, TextMessageEventContent},
         },
-        AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, AnyStateEventContent, EventType,
-        RawExt, SyncMessageEvent, SyncStateEvent,
+        AnyMessageEvent, AnyMessageEventContent, AnyRoomEvent, EventType, RawExt, SyncMessageEvent,
+        SyncStateEvent,
     },
     identifiers::{EventId, RoomId, RoomIdOrAliasId, ServerName, UserId},
     room::{Joined, Room},
@@ -84,7 +84,7 @@ pub async fn generate_appservice(config: &Config, cache: CacheDb) -> Appservice 
             //.token(clone_registration.as_token.clone())
             .timeout(Duration::from_secs(5 * 60));
         client
-            .sync_with_callback(sync_settings, |response| async move {
+            .sync_with_callback(sync_settings, |_response| async move {
                 info!("Got sync");
 
                 LoopCtrl::Break
@@ -485,11 +485,10 @@ impl VoyagerBot {
                             {
                                 let deserialized = room_create_response
                                     .content
-                                    .deserialize_content("m.room.encryption") // deserialize to the inner type
+                                    .deserialize_content("m.room.create") // deserialize to the inner type
                                     .unwrap();
-                                if let AnyStateEventContent::RoomCreate(create) = deserialized {
-                                    base_room.set_matrix_room_type(create.room_type);
-                                }
+
+                                base_room.handle_state_event(&deserialized);
                             }
 
                             // Encryption
@@ -851,8 +850,7 @@ impl EventHandler for VoyagerBot {
                         .expect("Can't send typing event");
                     let content = AnyMessageEventContent::RoomMessage(
                         MessageEventContent::notice_plain(
-                            r#"Hi! I am the server_stats Discovery bot by @mtrnord:nordgedanken.dev ! \n\n\n
-                   I am currently not able to read encrypted Rooms. Any command you try to send me will not work. Instead mention me in a room with !help."#,
+                            "Hi! I am the server_stats Discovery bot by @mtrnord:nordgedanken.dev! \n\n\nI am currently not able to read encrypted Rooms. Any command you try to send me will not work. Instead mention me in a room with !help.",
                         ),
                     );
                     room.send(content, None).await.unwrap();
