@@ -9,7 +9,7 @@ use sled::{IVec, Iter};
 use sqlx::PgPool;
 use std::{
     borrow::Cow,
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     convert::{TryFrom, TryInto},
     sync::Arc,
     time::Instant,
@@ -32,6 +32,12 @@ pub struct GraphDb {
 #[derive(sqlx::FromRow, Debug, Clone)]
 struct Member {
     state_key: String,
+}
+
+#[derive(sqlx::FromRow, Debug, Clone)]
+struct MemberCount {
+    room_id: String,
+    count: i64,
 }
 
 impl GraphDb {
@@ -58,33 +64,22 @@ impl GraphDb {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_synapse_joined_members_count(&self, room_id: &str) -> i64 {
-        let start = Instant::now();
+    async fn get_synapse_joined_members_count(&self) -> BTreeMap<String, i64> {
         let res = sqlx::query_as(
-            "SELECT COUNT(*) FROM current_state_events WHERE membership = 'join' AND type = 'm.room.member' AND room_id = $1;"
-        ).bind(room_id)
-        .fetch_one(&self.pool).await;
+            "SELECT room_id, COUNT(*) FROM current_state_events WHERE membership = 'join' AND type = 'm.room.member' GROUP by room_id;"
+        )
+        .fetch_all(&self.pool).await;
         match res {
             Ok(res) => {
-                let (rows,): (i64,) = res;
-                let duration = start.elapsed();
-                info!(
-                    "Took {:?} to get all membership events of type join",
-                    duration
-                );
-                return rows;
+                let rows: Vec<MemberCount> = res;
+                let map = rows.iter().map(|x| (x.room_id.clone(), x.count)).collect();
+                return map;
             }
             Err(e) => {
                 error!("Failed to get member count from db {:?}", e);
             }
         }
-
-        let duration = start.elapsed();
-        info!(
-            "Took {:?} to get all membership events of type join",
-            duration
-        );
-        0
+        BTreeMap::new()
     }
 
     #[tracing::instrument(skip(self))]
@@ -210,7 +205,13 @@ impl GraphDb {
                 {
                     return Ok(());
                 }
-                let members = self.get_synapse_joined_members_count(child).await;
+                let members = if let Some(members) =
+                    self.get_synapse_joined_members_count().await.get(child)
+                {
+                    *members
+                } else {
+                    0
+                };
                 let sse_json = SSEJson {
                     node: Arc::new(RoomRelation {
                         id: base64::encode(child_hash.to_le_bytes()),
@@ -305,6 +306,7 @@ impl GraphDb {
 
     #[tracing::instrument(skip(self))]
     pub async fn get_node(&self, id: String) -> Option<RoomRelation> {
+        let joined_members = self.get_synapse_joined_members_count().await;
         if let Ok(hash) = base64::decode(id.clone()) {
             let room_hash_bytes = GraphDb::fix_size(hash.as_ref());
             let room_hash = u128::from_le_bytes(room_hash_bytes);
@@ -314,7 +316,7 @@ impl GraphDb {
                 if let Some(client) = crate::MATRIX_CLIENT.get() {
                     let joined_rooms = client.joined_rooms();
                     if let Some(relation) = self
-                        .generate_room_relation(id.clone(), room_id, &joined_rooms)
+                        .generate_room_relation(id.clone(), room_id, &joined_rooms, &joined_members)
                         .await
                     {
                         if relation.name == "MTRNord" || id == "4u98GV1CGlCn6PvxBerjrw==" {
@@ -362,11 +364,17 @@ impl GraphDb {
             })
             .collect();
 
+        let joined_members = self.get_synapse_joined_members_count().await;
         if let Some(client) = crate::MATRIX_CLIENT.get() {
             let joined_rooms = client.joined_rooms();
             for ((parent_hash, parent), child_hashes) in room_id_relations {
                 if let Some(relation) = self
-                    .generate_room_relation(parent_hash.clone(), &parent, &joined_rooms)
+                    .generate_room_relation(
+                        parent_hash.clone(),
+                        &parent,
+                        &joined_rooms,
+                        &joined_members,
+                    )
                     .await
                 {
                     let links: BTreeSet<Link> = child_hashes
@@ -409,7 +417,12 @@ impl GraphDb {
                         let room_id =
                             std::str::from_utf8(room_id_bytes.as_ref()).unwrap_or_default();
                         if let Some(relation) = self
-                            .generate_room_relation(link.target.clone(), room_id, &joined_rooms)
+                            .generate_room_relation(
+                                link.target.clone(),
+                                room_id,
+                                &joined_rooms,
+                                &joined_members,
+                            )
                             .await
                         {
                             if relation.name == "MTRNord"
@@ -457,12 +470,13 @@ impl GraphDb {
         }
     }
 
-    #[tracing::instrument(skip(self, joined_rooms))]
+    #[tracing::instrument(skip(self, joined_rooms, joined_members))]
     async fn generate_room_relation(
         &self,
         room_hash: String,
         room_id: &str,
         joined_rooms: &[Joined],
+        joined_members: &BTreeMap<String, i64>,
     ) -> Option<RoomRelation> {
         let room_id_serialized = &RoomId::try_from(room_id).unwrap();
 
@@ -498,7 +512,11 @@ impl GraphDb {
             } else {
                 "".into()
             };
-            let members = self.get_synapse_joined_members_count(room_id).await;
+            let members = if let Some(members) = joined_members.get(room_id) {
+                *members
+            } else {
+                0
+            };
             return Some(RoomRelation {
                 id: room_hash,
                 name,
