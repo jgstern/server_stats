@@ -94,7 +94,7 @@ pub async fn run_server(
                 .and(warp::path::end())
                 .and(warp::fs::file(path.clone())))
             .or(warp::path::end().and(warp::get()).and(warp::fs::file(path)))
-            .with(warp::compression::brotli()))
+            .with(warp::compression::gzip()))
         .recover(handle_rejection)
         .with(warp::trace::request());
     //.with(log);

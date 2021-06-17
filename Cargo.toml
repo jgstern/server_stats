@@ -68,4 +68,4 @@ opt-level = 2
 lto = true
 codegen-units = 1
 # Use for cargo flamegraph
-#debug = true
+debug = true
