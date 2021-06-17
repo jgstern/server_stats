@@ -82,7 +82,7 @@ impl GraphDb {
     #[tracing::instrument(skip(self))]
     async fn get_synapse_joined_members(&self) -> BTreeSet<String> {
         let res = sqlx::query_as(
-            "SELECT split_part(state_key, ':', 2) AS server_name FROM current_state_events WHERE membership = 'join' AND type = 'm.room.member';",
+            "SELECT distinct split_part(state_key, ':', 2) AS server_name FROM current_state_events WHERE membership = 'join' AND type = 'm.room.member';",
         )
         .fetch_all(&self.pool).await;
         match res {
