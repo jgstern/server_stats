@@ -1,9 +1,5 @@
-use crate::{
-    errors::Errors,
-    webpage::api::{Link, RelationsJson, RoomRelation, SSEJson, ServersJson},
-};
+use crate::webpage::api::{Link, RelationsJson, RoomRelation, SSEJson, ServersJson};
 use color_eyre::Result;
-use futures::{future, StreamExt, TryStreamExt};
 use matrix_sdk::{identifiers::RoomId, room::Joined};
 use sled::{IVec, Iter};
 use sqlx::PgPool;
@@ -12,10 +8,9 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{TryFrom, TryInto},
     sync::{Arc, RwLock},
-    time::Instant,
 };
 use tokio::sync::watch::Sender;
-use tracing::{error, info};
+use tracing::error;
 
 type RelationsMix = Vec<((String, String), BTreeSet<u128>)>;
 
@@ -31,14 +26,14 @@ pub struct GraphDb {
 }
 
 #[derive(sqlx::FromRow, Debug, Clone)]
-struct Member {
-    state_key: String,
-}
-
-#[derive(sqlx::FromRow, Debug, Clone)]
 struct MemberCount {
     room_id: String,
     count: i64,
+}
+
+#[derive(sqlx::FromRow, Debug, Clone)]
+struct Server {
+    server_name: String,
 }
 
 impl GraphDb {
@@ -85,30 +80,24 @@ impl GraphDb {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_synapse_joined_members(&self) -> Vec<Member> {
-        let start = Instant::now();
-        let rows = sqlx::query_as::<_, Member>(
-            "SELECT state_key FROM current_state_events WHERE membership = 'join' AND type = 'm.room.member';",
+    async fn get_synapse_joined_members(&self) -> BTreeSet<String> {
+        let res = sqlx::query_as(
+            "SELECT split_part(state_key, ':', 2) AS server_name FROM current_state_events WHERE membership = 'join' AND type = 'm.room.member';",
         )
-        .fetch(&self.pool)
-        .map_err(|e| Errors::DatabaseError(e.to_string()));
-        let filtered_events = rows
-            .map(|x| {
-                if let Err(ref e) = x {
-                    error!("Failed to get members from database: {}", e);
-                }
-                x
-            })
-            .filter_map(|x| future::ready(x.ok()))
-            .collect()
-            .await;
-
-        let duration = start.elapsed();
-        info!(
-            "Took {:?} to get all membership events of type join",
-            duration
-        );
-        filtered_events
+        .fetch_all(&self.pool).await;
+        match res {
+            Ok(res) => {
+                let rows: Vec<Server> = res;
+                return rows
+                    .iter()
+                    .map(|x| x.server_name.clone())
+                    .collect::<BTreeSet<_>>();
+            }
+            Err(e) => {
+                error!("Failed to get member count from db {:?}", e);
+            }
+        }
+        BTreeSet::new()
     }
 
     #[tracing::instrument(skip(self))]
@@ -660,11 +649,7 @@ impl GraphDb {
 
             if include_members {
                 let members = self.get_synapse_joined_members().await;
-                let servers_from_members = members.iter().map(|member| {
-                    let server_name: Vec<&str> = member.state_key.split(':').collect();
-                    server_name[1].to_string()
-                });
-                servers.extend(servers_from_members);
+                servers.extend(members);
             }
 
             ServersJson { servers }
