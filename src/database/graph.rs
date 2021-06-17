@@ -85,12 +85,11 @@ impl GraphDb {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_synapse_joined_members(&self, room_id: &str) -> Vec<Member> {
+    async fn get_synapse_joined_members(&self) -> Vec<Member> {
         let start = Instant::now();
         let rows = sqlx::query_as::<_, Member>(
-            "SELECT state_key FROM current_state_events WHERE membership = 'join' AND type = 'm.room.member' AND room_id = $1;",
+            "SELECT state_key FROM current_state_events WHERE membership = 'join' AND type = 'm.room.member';",
         )
-        .bind(room_id)
         .fetch(&self.pool)
         .map_err(|e| Errors::DatabaseError(e.to_string()));
         let filtered_events = rows
@@ -648,7 +647,6 @@ impl GraphDb {
                     && node_ids.contains(&link.source.to_string())
             });
 
-            let rooms_clone = rooms.clone();
             let mut servers: BTreeSet<String> = rooms
                 .into_iter()
                 .filter_map(|(_, room_id)| {
@@ -661,13 +659,12 @@ impl GraphDb {
                 .collect();
 
             if include_members {
-                for (_, room_id) in rooms_clone {
-                    let members = self.get_synapse_joined_members(&room_id).await;
-                    for member in members {
-                        let server_name: Vec<&str> = member.state_key.split(':').collect();
-                        servers.insert(server_name[1].to_string());
-                    }
-                }
+                let members = self.get_synapse_joined_members().await;
+                let servers_from_members = members.iter().map(|member| {
+                    let server_name: Vec<&str> = member.state_key.split(':').collect();
+                    server_name[1].to_string()
+                });
+                servers.extend(servers_from_members);
             }
 
             ServersJson { servers }
