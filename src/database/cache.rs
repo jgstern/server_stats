@@ -18,7 +18,7 @@ pub struct CacheDb {
 
 impl CacheDb {
     #[tracing::instrument(name = "CacheDb::new", skip(tx))]
-    pub fn new(tx: Sender<Option<SSEJson>>,pool:PgPool) -> Self {
+    pub fn new(tx: Sender<Option<SSEJson>>, pool: PgPool) -> Self {
         info!("Created new db");
         let db = sled::Config::default()
             .path("./storage/cache".to_owned())
@@ -34,7 +34,8 @@ impl CacheDb {
             state,
             parent_child,
             child_parent,
-            tx,pool
+            tx,
+            pool,
         ));
         let db = Arc::new(db);
         CacheDb { db, graph }

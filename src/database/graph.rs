@@ -11,7 +11,7 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     convert::{TryFrom, TryInto},
-    sync::Arc,
+    sync::{Arc, RwLock},
     time::Instant,
 };
 use tokio::sync::watch::Sender;
@@ -27,6 +27,7 @@ pub struct GraphDb {
     child_parent: sled::Tree,
     websocket_tx: Sender<Option<SSEJson>>,
     pool: PgPool,
+    room_name_cache: RwLock<BTreeMap<String, String>>,
 }
 
 #[derive(sqlx::FromRow, Debug, Clone)]
@@ -60,6 +61,7 @@ impl GraphDb {
             child_parent,
             websocket_tx: tx,
             pool,
+            room_name_cache: RwLock::new(BTreeMap::new()),
         }
     }
 
@@ -180,15 +182,24 @@ impl GraphDb {
                 } else {
                     child.to_string()
                 };
-                let name = if let Ok(name) = room.display_name().await {
-                    if name.is_empty() {
-                        child.to_string()
+
+                let mut name = { self.room_name_cache.read().unwrap().get(child).cloned() };
+                if name.is_none() {
+                    name = if let Ok(name) = room.display_name().await {
+                        if name.is_empty() {
+                            Some(child.to_string())
+                        } else {
+                            self.room_name_cache
+                                .write()
+                                .unwrap()
+                                .insert(child.to_string(), name.clone());
+                            Some(name)
+                        }
                     } else {
-                        name
-                    }
-                } else {
-                    child.to_string()
+                        Some(child.to_string())
+                    };
                 };
+                let name = name.unwrap();
 
                 let topic = if let Some(topic) = room.topic() {
                     topic
@@ -492,15 +503,25 @@ impl GraphDb {
             } else {
                 room_id.into()
             };
-            let name = if let Ok(name) = room.display_name().await {
-                if name.is_empty() {
-                    room_id.to_string()
+
+            // TODO update on changes somehow
+            let mut name = { self.room_name_cache.read().unwrap().get(room_id).cloned() };
+            if name.is_none() {
+                name = if let Ok(name) = room.display_name().await {
+                    if name.is_empty() {
+                        Some(room_id.to_string())
+                    } else {
+                        self.room_name_cache
+                            .write()
+                            .unwrap()
+                            .insert(room_id.to_string(), name.clone());
+                        Some(name)
+                    }
                 } else {
-                    name
-                }
-            } else {
-                room_id.to_string()
+                    Some(room_id.to_string())
+                };
             };
+            let name = name.unwrap();
 
             let topic = if let Some(topic) = room.topic() {
                 topic
