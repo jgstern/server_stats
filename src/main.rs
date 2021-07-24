@@ -93,7 +93,7 @@ async fn force_cleanup(cache: CacheDb, config: Config) -> Result<()> {
 
     Ok(())
 }
-//#[tokio::main(flavor = "multi_thread", worker_threads = 1_000)]
+
 #[tokio::main]
 #[tracing::instrument]
 async fn main() -> Result<()> {
@@ -107,7 +107,7 @@ async fn main() -> Result<()> {
         .add_directive("server_stats=info".parse()?)
         .add_directive("sled=info".parse()?)
         //.add_directive("warp=info".parse()?)
-        .add_directive("warp::filters::query=info".parse()?)
+        //.add_directive("warp::filters::query=info".parse()?)
         //.add_directive("matrix_sdk=info".parse()?)
         //.add_directive("matrix_sdk_base::client=off".parse()?)
         .add_directive("rustls::session=off".parse()?);
@@ -117,16 +117,16 @@ async fn main() -> Result<()> {
         .flatten_event(true)
         .with_thread_names(true);
 
-    let tracer_provider = opentelemetry_jaeger::new_pipeline()
-        .with_service_name("server_stats")
-        .with_collector_endpoint("http://localhost:14268/api/traces")
-        .build_batch(opentelemetry::runtime::Tokio)?;
-    let tracer = tracer_provider.get_tracer("server-stats", Some(env!("CARGO_PKG_VERSION")));
-    let _ = global::set_tracer_provider(tracer_provider);
-    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+//    let tracer_provider = opentelemetry_jaeger::new_pipeline()
+//        .with_service_name("server_stats")
+//        .with_collector_endpoint("http://localhost:14268/api/traces")
+//        .build_batch(opentelemetry::runtime::Tokio)?;
+//    let tracer = tracer_provider.get_tracer("server-stats", Some(env!("CARGO_PKG_VERSION")));
+ //   let _ = global::set_tracer_provider(tracer_provider);
+//    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
     tracing_subscriber::registry()
-        .with(telemetry)
+//        .with(telemetry)
         .with(filter)
         .with(fmt_layer)
         .init();

@@ -42,6 +42,7 @@ pub async fn run_server(
     let graph = cache.graph.clone();
     let graph_one = graph.clone();
     let graph_two = graph.clone();
+    let graph_three = graph.clone();
     info!("Path is: {} and {}", config.api.webpage_path, path);
 
     /*let log = warp::log::custom(|info| {
@@ -63,6 +64,11 @@ pub async fn run_server(
                 .map(move || graph_one.clone())
                 .and(warp::path::end())
                 .and_then(|graph: Arc<GraphDb>| async { relations(graph).await }))
+            .or(warp::any().and(
+                warp::path!("api" / "v0.1.0" / "3d-data")
+                    .map(move || graph_three.clone())
+                    .and_then(|graph: Arc<GraphDb>| async { relations(graph).await }),
+            ))
             .or(warp::path("servers")
                 .and(warp::path::end())
                 .and(opt_servers_query)
